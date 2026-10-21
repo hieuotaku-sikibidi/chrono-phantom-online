@@ -532,7 +532,7 @@
         screenShake = 0; screenFlash = .14;
         try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
         try { if (typeof sfxBossSkill === 'function') sfxBossSkill(30); } catch (_) {}
-        var qRingRadius=Math.min(V_WIDTH*.44,V_HEIGHT*.78);
+        var qRingRadius=Math.max(8,Math.min(V_WIDTH*.40,(V_HEIGHT-GROUND_Y-4)/.32));
         spawnMagicCircle(V_WIDTH / 2, GROUND_Y, qRingRadius, '#a855f7', 2.1, true);
         spawnMagicCircle(V_WIDTH / 2, GROUND_Y, qRingRadius*.68, '#f5d0fe', 1.7, true);
         spawnLightPillar(V_WIDTH / 2, GROUND_Y, Math.min(V_HEIGHT*.74,200), '#7e22ce', 1.7);
@@ -558,8 +558,8 @@
           spawnLightPillar(bossFxX, GROUND_Y, Math.min(V_HEIGHT*.48, 130), '#a855f7', 1.2);
           spawnMagicCircle(bossFxX, GROUND_Y, bossFxR, '#7e22ce', 1.0, true);
         }
-        spawnParticles(V_WIDTH/2, GROUND_Y-65, 72, '#a855f7', 1.8);
-        spawnParticles(V_WIDTH/2, GROUND_Y-65, 38, '#f5d0fe', 1.05);
+        spawnParticles(V_WIDTH/2, GROUND_Y-65, 64, '#a855f7', 1.0);
+        spawnParticles(V_WIDTH/2, GROUND_Y-65, 32, '#f5d0fe', .62);
         showToast('☢ I AM ATOMIC — VỤ NỔ NGUYÊN TỬ!', '影');
         if (DOMAIN.timerId) clearTimeout(DOMAIN.timerId);
         DOMAIN.timerId = setTimeout(function () {
