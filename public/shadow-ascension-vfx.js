@@ -419,10 +419,11 @@
         var travel=Math.max(0,Math.abs(edgeX-launchX)-8);
         var endX=clamp(launchX+dir*travel*flight,10,w-10);
         /* Charge halo and seven blades converge toward the nearest screen edge. */
+        var rSide=Math.max(5,Math.min(ox,w-ox)-4),rVert=Math.max(5,Math.min(oy,h-oy)-4);
         c.globalAlpha=.24*(1-p);c.strokeStyle='#a855f7';c.lineWidth=1.4;
-        c.beginPath();c.ellipse(ox,oy,clamp(20+age*17,20,43),clamp(9+age*7,9,24),dir*age,0,Math.PI*2);c.stroke();
+        c.beginPath();c.ellipse(ox,oy,Math.min(rSide,clamp(20+age*17,20,43)),Math.min(rVert,clamp(9+age*7,9,24)),dir*age,0,Math.PI*2);c.stroke();
         c.globalAlpha=.28*(1-p);c.strokeStyle='#67e8f9';c.lineWidth=.9;
-        c.beginPath();c.ellipse(ox,oy,clamp(26+age*22,26,52),clamp(11+age*9,11,28),-dir*age,0,Math.PI*2);c.stroke();
+        c.beginPath();c.ellipse(ox,oy,Math.min(rSide,clamp(26+age*22,26,52)),Math.min(rVert,clamp(11+age*9,11,28)),-dir*age,0,Math.PI*2);c.stroke();
         for(var blade=0;blade<7;blade++){
           var spread=(blade-3)*9;
           var bx=clamp(launchX+dir*travel*flight,10,w-10);
@@ -460,18 +461,22 @@
     var p=clamp(age/duration,0,1),fade=1-p,dir=s.facing===-1?-1:1;
     var w=wSafe(),h=typeof V_HEIGHT==='number'?V_HEIGHT:270,ground=typeof GROUND_Y==='number'?GROUND_Y:h-48;
     var x=clamp(Number(s.x)||w*.5,24,w-24),y=clamp(Number(s.y)||ground-24,28,ground-10);
+    var forwardRoom=dir>0?w-x-8:x-8;
+    var sideRoom=Math.max(8,Math.min(x-8,w-x-8));
+    var verticalRoom=Math.max(8,Math.min(y-8,h-y-8));
+    var maxRadius=Math.max(8,Math.min(sideRoom-4,verticalRoom-4));
     c.save();c.globalCompositeOperation='lighter';c.translate(x,y);if(dir<0)c.scale(-1,1);
-    var reach=26+(s.step||0)*5;
+    var reach=Math.min(26+(s.step||0)*5,maxRadius-6);
     for(var tr=0;tr<3;tr++){
-      var lag=tr*.12,pr=clamp(p-lag,0,1),r=reach+pr*18;
+      var lag=tr*.12,pr=clamp(p-lag,0,1),r=Math.min(maxRadius,reach+pr*18);
       c.globalAlpha=Math.max(0,(.48-tr*.12)*fade);
       c.strokeStyle=tr===0?'#ffffff':(tr===1?(s.subColor||'#67e8f9'):(s.color||'#a855f7'));
       c.lineWidth=tr===0?1.1:(tr===1?3.1:7.2);
       c.beginPath();c.arc(0,-4,r,-1.03+pr*.72,.92+pr*.76);c.stroke();
     }
     c.globalAlpha=.8*fade;c.strokeStyle=s.subColor||'#67e8f9';c.lineWidth=1.7;
-    c.beginPath();c.moveTo(-4,-7);c.quadraticCurveTo(13,-36,clamp(reach+14,14,w-x-4),clamp(-35+Math.sin(p*3)*4,-Math.max(30,y-8),h-y-4));c.stroke();
-    var tipX=clamp(reach+14,10,w-x-5),tipY=clamp(-35+Math.sin(p*3)*4,-Math.max(22,y-8),Math.max(8,h-y-6));
+    c.beginPath();c.moveTo(-4,-7);c.quadraticCurveTo(13,-Math.min(36,verticalRoom),clamp(reach+14,8,Math.max(8,forwardRoom)),clamp(-Math.min(35,verticalRoom)+Math.sin(p*3)*4,-Math.max(8,y-8),Math.max(8,h-y-6)));c.stroke();
+    var tipX=clamp(reach+14,8,Math.max(8,forwardRoom)),tipY=clamp(-Math.min(35,verticalRoom)+Math.sin(p*3)*4,-Math.max(8,y-8),Math.max(8,h-y-6));
     c.globalAlpha=.9*fade;c.fillStyle='#f5d0fe';c.shadowColor='#c084fc';c.shadowBlur=10;
     c.beginPath();c.arc(tipX,tipY,1.5+fade*2,0,Math.PI*2);c.fill();c.shadowBlur=0;
     for(var spark=0;spark<6;spark++){
@@ -713,7 +718,7 @@
       domain.buffExpiresAt = domain.expiresAt;
       try { if (typeof applyPlayerStatsToCombat === 'function') applyPlayerStatsToCombat(); } catch (_) {}
       player.attackSpeed = (domain.hadSpeed ? domain.baseSpeed : 1) * 1.1;
-      screenShake = Math.max(screenShake || 0, 12);
+      screenShake = 0;
       showToast('LÃNH ĐỊA ATOMIC • ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY', '☄️');
       domain.expireTimerId = setTimeout(function () {
         var state = window.__cpShadowQState;
@@ -802,8 +807,9 @@
         if(ready&&cdTimer.skillR>0){
           pushFx({kind:'R',x:x,y:y,facing:dir,duration:1.08});
           player.state='ATTACK';player.animTimer=0;player.animFrame=2;
-          screenShake=Math.max(screenShake||0,9);
-          screenFlash=Math.max(screenFlash||0,.28);
+          // R is a screen-wide formation; keep the camera steady so blades stay aligned.
+          screenShake=0;
+          screenFlash=Math.max(screenFlash||0,.14);
           try{sfxBossSkill(6);}catch(_){}
           try{
             for(var j=0;j<7;j++){
@@ -813,9 +819,11 @@
               var startX=clamp(x+dir*18,radius+3,V_WIDTH-radius-3);
               var startY=clamp(y+(j-3)*7,26,GROUND_Y-10);
               var vx=dir*speed*Math.cos(angle),vy=speed*Math.sin(angle);
-              var edgeTravel=dir>0?(V_WIDTH-radius-3-startX):(startX-radius-3);
-              var safeLife=Math.max(.06,Math.min(.95,Math.max(0,edgeTravel)/Math.max(1,Math.abs(vx))-.035));
-              projectiles.push({
+              var edgeTravel=dir>0?(V_WIDTH-radius-4-startX):(startX-radius-4);
+              var verticalTravel=vy<0?(startY-radius-4):(V_HEIGHT-radius-4-startY);
+              var safeLife=Math.min(.95,edgeTravel/Math.max(1,Math.abs(vx))-.055,verticalTravel/Math.max(1,Math.abs(vy))-.055);
+              // At the edge, keep the visual fan but do not launch a projectile that would immediately escape.
+              if(safeLife>.025)projectiles.push({
                 x:startX,y:startY,vx:vx,vy:vy,
                 facing:dir,radius:radius,
                 damage:Math.round(player.atk*(j===3?1.28:1.02)),
