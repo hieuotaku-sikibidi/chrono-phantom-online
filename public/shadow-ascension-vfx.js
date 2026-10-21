@@ -531,6 +531,128 @@
     c.restore();
   }
 
+
+  function triggerShadowAtomicQFixed() {
+    if (gameState !== 'PLAYING' || cdTimer.skillQ > 0 || !shadowSelected()) return false;
+    var domain = window.__cpShadowDomain;
+    if (!domain) {
+      domain = window.__cpShadowDomain = {
+        active:false, expiresAt:0, buffActive:false, buffExpiresAt:0,
+        baseAtk:null, baseSpeed:null, hadSpeed:false, startAt:0, timerId:0
+      };
+    }
+
+    /* Cancel a previous cast cleanly so ATK/speed buffs never stack on rapid recasts. */
+    if (domain.timerId) clearTimeout(domain.timerId);
+    if (domain.expireTimerId) clearTimeout(domain.expireTimerId);
+    if (window.__shadowAtomicTimer) clearTimeout(window.__shadowAtomicTimer);
+    if ((domain.buffActive || domain.active) && typeof domain.restoreStats === 'function') {
+      try { domain.restoreStats(); } catch (_) {}
+    }
+    domain.active = false;
+    domain.expiresAt = 0;
+    domain.buffActive = false;
+    domain.buffExpiresAt = 0;
+
+    var cdr = clamp((Number(player.cdr) || 0) / 100, 0, .8);
+    cdTimer.skillQ = Math.max(1, COOLDOWNS.skillQ * (1 - cdr));
+    domain.startAt = timeNow();
+    domain.baseAtk = Number(player.atk) || 1;
+    domain.hadSpeed = typeof player.attackSpeed === 'number' && isFinite(player.attackSpeed);
+    domain.baseSpeed = domain.hadSpeed ? player.attackSpeed : 1;
+
+    var token = ((window.__cpShadowQState && window.__cpShadowQState.token) || 0) + 1;
+    window.__cpShadowQState = {token:token};
+    var castTime = 2.85;
+    burstCutscene = {
+      active:true, timer:castTime, maxTimer:castTime,
+      title:'I AM ATOMIC', sub:'SHADOW • SSS+ ĐẶC BIỆT • ATOMIC DOMINION',
+      color:'#a855f7', charId:'char_shadow'
+    };
+    player.isInvincible = true;
+    player.invincibleTimer = Math.max(player.invincibleTimer || 0, castTime);
+    player.state = 'ATTACK';
+    player.animTimer = 0;
+    player.animFrame = 2;
+
+    /* Keep the flash below the cinematic layer; the old .7-.9 white flash hid the Q animation. */
+    screenShake = Math.max(screenShake || 0, 26);
+    screenFlash = Math.max(screenFlash || 0, .14);
+    try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
+    try { if (typeof sfxBossSkill === 'function') sfxBossSkill(30); } catch (_) {}
+    try {
+      spawnMagicCircle(V_WIDTH/2, GROUND_Y, 345, '#a855f7', 3.4, true);
+      spawnMagicCircle(V_WIDTH/2, GROUND_Y, 238, '#f5d0fe', 2.7, true);
+      spawnLightPillar(V_WIDTH/2, GROUND_Y, 260, '#7e22ce', 2.5);
+      for (var r = 0; r < 24; r++) {
+        var a = Math.PI * 2 * r / 24;
+        spawnDimensionCrack(
+          V_WIDTH/2 + Math.cos(a)*80, GROUND_Y + Math.sin(a)*18,
+          V_WIDTH/2 + Math.cos(a)*220, GROUND_Y + Math.sin(a)*28,
+          r%2 ? '#c084fc' : '#f5d0fe', 3.2, 1.05
+        );
+      }
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 110, '#a855f7', 3.4);
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 56, '#f5d0fe', 2.3);
+      showToast('I AM ATOMIC — VỤ NỔ NGUYÊN TỬ!', '影');
+    } catch (_) {}
+
+    var targetBoss = typeof boss !== 'undefined' ? boss : null;
+    var targetList = Array.isArray(enemies) ? enemies.slice() : [];
+    var attack = Math.max(1, Number(player.atk) || 1);
+    var nukeDamage = Math.max(1, Math.round(attack * 35));
+
+    targetList.forEach(function (enemy) {
+      if (!enemy || !enemy.alive) return;
+      try {
+        enemy.stunTimer = Math.max(enemy.stunTimer || 0, 2.2);
+        damageEnemy(enemy, nukeDamage, '#a855f7', '☢ I AM ATOMIC', true);
+        spawnLightPillar(enemy.x, GROUND_Y, 92, '#c084fc', 1.15);
+        spawnMagicCircle(enemy.x, GROUND_Y, 120, '#7e22ce', 1.25, true);
+      } catch (_) {}
+    });
+
+    /* Spawn all boss-side visuals before applying damage; damageBoss may end/advance the stage. */
+    if (targetBoss && targetBoss.alive) {
+      try {
+        targetBoss.stunTimer = Math.max(targetBoss.stunTimer || 0, 2.5);
+        spawnLightPillar(targetBoss.x, GROUND_Y, 170, '#a855f7', 1.55);
+        spawnMagicCircle(targetBoss.x, GROUND_Y, 190, '#7e22ce', 1.45, true);
+      } catch (_) {}
+      try { damageBoss(nukeDamage * 2, '☢ I AM ATOMIC', true, '#c084fc'); } catch (_) {}
+    }
+
+    /* Start the domain after the cinematic. Token-guarding prevents stale timers from old casts. */
+    domain.timerId = setTimeout(function () {
+      var current = window.__cpShadowQState;
+      if (!current || current.token !== token) return;
+      if (gameState === 'DEFEAT' || gameState === 'START') return;
+      domain.active = true;
+      domain.expiresAt = timeNow() + 10000;
+      domain.buffActive = true;
+      domain.buffExpiresAt = domain.expiresAt;
+      try { if (typeof applyPlayerStatsToCombat === 'function') applyPlayerStatsToCombat(); } catch (_) {}
+      player.attackSpeed = (domain.hadSpeed ? domain.baseSpeed : 1) * 1.1;
+      screenShake = Math.max(screenShake || 0, 12);
+      showToast('LÃNH ĐỊA ATOMIC • ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY', '☄️');
+      domain.expireTimerId = setTimeout(function () {
+        var state = window.__cpShadowQState;
+        if (!state || state.token !== token) return;
+        if (typeof domain.restoreStats === 'function') {
+          try { domain.restoreStats(); } catch (_) { domain.active = false; domain.buffActive = false; }
+        } else {
+          domain.active = false;
+          domain.buffActive = false;
+          domain.buffExpiresAt = 0;
+          try { if (typeof applyPlayerStatsToCombat === 'function') applyPlayerStatsToCombat(); } catch (_) {}
+        }
+        showToast('Lãnh địa Shadow đã tan biến.', '🌌');
+      }, 10010);
+    }, castTime * 1000);
+
+    return true;
+  }
+
   function install() {
     if(typeof CHARACTER_DATABASE==='undefined'||typeof playerData==='undefined'){
       setTimeout(install,50);return;
@@ -540,6 +662,18 @@
       sh.rankLabel='SSS+ ĐẶC BIỆT';
       sh.skillLabels={e:'E: SHADOW STEP — VOID WALK',r:'R: BLACK KNIGHT PARADE',q:'Q: I AM ATOMIC'};
       sh.desc='Shadow Emperor: Void Walk, Black Knight Parade và I AM ATOMIC — xóa sổ chiến trường, rồi mở lãnh địa thành phố đổ nát trong 10 giây.';
+    }
+
+    window.__cpShadowQFixed = triggerShadowAtomicQFixed;
+    window.__cpActivateShadowAtomicWeapon = triggerShadowAtomicWeapon;
+
+    var oldQ = window.triggerSkillQ;
+    if (typeof oldQ === 'function' && !window.__cpShadowQFinalWrapped) {
+      window.__cpShadowQFinalWrapped = true;
+      window.triggerSkillQ = function () {
+        if (!shadowSelected()) return oldQ.apply(this, arguments);
+        return triggerShadowAtomicQFixed();
+      };
     }
 
     var oldT=window.triggerSkillT;
