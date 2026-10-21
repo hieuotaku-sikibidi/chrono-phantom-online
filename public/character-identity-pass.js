@@ -328,6 +328,7 @@
       index=(i+WEAPON_SPOTLIGHTS.length)%WEAPON_SPOTLIGHTS.length;
       const w=WEAPON_SPOTLIGHTS[index];
       section.style.setProperty('--wb-color',w.color);section.style.setProperty('--wb-sub',w.sub);
+      window.__cpFeaturedWeaponId=w.id;
       art.innerHTML=weaponSvg(w.shape,w.color,w.sub);
       name.textContent=w.name;desc.textContent=w.text;atk.textContent=String(w.atk);
       let skillName=w.id==='w_yuno_sss'?'Huyết Nguyệt Phán Quyết':w.id==='w_sss_1'?'Vạn Vật Đình Trệ':w.id==='w_sss_2'?'Hư Không Táng Diệt':w.id==='w_sss_3'?'Tử Thần Thu Hồn':w.id==='w_sss_4'?'Pháo Tinh Vân 0-K':w.id==='w_sss_5'?'Ảnh Nguyệt Tam Đoạn':'Atomic Dominion';
@@ -344,20 +345,20 @@
     renderWeapon(0);
   }
 
-  function setWeaponMode(enabled) {
+  function setWeaponMode(enabled, silent) {
     window.__cpWeaponBannerMode=!!enabled;
     const weaponBtn=document.getElementById('cpwbWeaponMode'), allBtn=document.getElementById('cpwbAllMode');
     if(weaponBtn)weaponBtn.classList.toggle('active',!!enabled);
     if(allBtn)allBtn.classList.toggle('active',!enabled);
     const heading=document.getElementById('cpwbModeHeading'), copy=document.getElementById('cpwbModeDesc');
     if(heading)heading.textContent=enabled?'BANNER VŨ KHÍ ĐANG ĐƯỢC CHỌN':'BANNER THÁNH KHÍ TỔNG HỢP';
-    if(copy)copy.textContent=enabled?'Kết quả chỉ ra vũ khí; tỷ lệ hiếm và Pity 90 giữ nguyên.':'Kết quả có thể là vũ khí, giáp, mũ, nhẫn hoặc bảo vật.';
+    if(copy)copy.textContent=enabled?'Chỉ rơi vũ khí. Vũ khí đang chọn chiếm 50% trong các lần rơi SSS; Pity 90 giữ nguyên.':'Kết quả có thể là vũ khí, giáp, mũ, nhẫn hoặc bảo vật.';
     const tab=document.getElementById('tabContentGacha');
     if(tab){
       const h=tab.querySelector(':scope > div h3');
       if(h)h.textContent=enabled?'TRIỆU HỒI VŨ KHÍ THẦN THOẠI':'TRIỆU HỒI BỘ THÁNH KHÍ GENESIS VÔ HẠN';
     }
-    if(typeof showToast==='function')showToast(enabled?'Đã chọn Banner Vũ Khí — không rơi giáp/phụ kiện.':'Đã chọn Banner Thánh Khí Tổng Hợp.','⚔️');
+    if(!silent && typeof showToast==='function')showToast(enabled?'Đã chọn Banner Vũ Khí — không rơi giáp/phụ kiện.':'Đã chọn Banner Thánh Khí Tổng Hợp.','⚔️');
   }
 
   function patchWeaponPool() {
@@ -367,7 +368,16 @@
       if(!window.__cpWeaponBannerMode) return original.apply(this,arguments);
       try{
         const pool=typeof GEAR_DATABASE!=='undefined'?GEAR_DATABASE.filter(g=>g&&g.type==='weapon'&&g.rank===rank):[];
-        if(pool.length)return pool[Math.floor(Math.random()*pool.length)];
+        if(pool.length){
+          if(rank==='SSS' && window.__cpFeaturedWeaponId){
+            const featured=pool.find(g=>g.id===window.__cpFeaturedWeaponId);
+            if(featured && Math.random()<0.5)return featured;
+            const offRate=pool.filter(g=>g.id!==window.__cpFeaturedWeaponId);
+            if(offRate.length)return offRate[Math.floor(Math.random()*offRate.length)];
+            return featured || pool[0];
+          }
+          return pool[Math.floor(Math.random()*pool.length)];
+        }
       }catch(_){}
       return original.apply(this,arguments);
     };
@@ -379,7 +389,7 @@
     ensureLayer();
     installWeaponBanner();
     patchWeaponPool();
-    if(window.__cpWeaponBannerMode===undefined)setWeaponMode(true);
+    if(window.__cpWeaponBannerMode===undefined)setWeaponMode(true,true);
     if(!animationStarted){animationStarted=true;requestAnimationFrame(renderFX);}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
