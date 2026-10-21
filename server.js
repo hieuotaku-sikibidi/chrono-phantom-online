@@ -135,9 +135,9 @@ io.on("connection", socket => {
       id, hostUid: uid, members: new Set([uid]), invited: new Set(), playerStates: new Map(),
       name: cleanText(settings?.name, 32) || "Phòng đột kích",
       privacy: settings?.privacy === "private" ? "private" : "public",
-      stage: [3,5,8,10].includes(stageValue) ? stageValue : 10,
+      stage: Number.isInteger(stageValue) && stageValue >= 1 && stageValue <= 10 ? stageValue : 10,
       difficulty: ["normal","hard","abyss"].includes(settings?.difficulty) ? settings.difficulty : "hard",
-      createdAt: Date.now(), state: null
+      createdAt: Date.now(), state: null, boss: null, started: false
     };
     rooms.set(id, room); socket.join("room:" + id); socket.data.roomId = id;
     socket.emit("room:created", roomSummary(room));
@@ -165,6 +165,10 @@ io.on("connection", socket => {
     room.members.add(uid); room.invited.delete(uid); socket.join("room:" + id); socket.data.roomId = id;
     socket.emit("room:update", roomSummary(room));
     io.to("room:" + id).emit("room:update", roomSummary(room));
+    if (room.started && room.boss) {
+      socket.emit("room:game:start", { roomId: room.id, stage: room.stage, difficulty: room.difficulty, startedAt: room.startedAt || Date.now() });
+      socket.emit("boss:state", { roomId: room.id, ...room.boss });
+    }
   });
 
   function leaveRoom(s) {
@@ -186,6 +190,10 @@ io.on("connection", socket => {
     const uid = uidOf(socket), room = rooms.get(socket.data.roomId);
     if (!uid || !room) return socket.emit("server:error", "Hãy vào phòng trước.");
     if (room.hostUid !== uid) return socket.emit("server:error", "Chỉ chủ phòng mới có thể bắt đầu.");
+    room.boss = null;
+    room.state = null;
+    room.started = true;
+    room.playerStates.clear();
     io.to("room:" + room.id).emit("room:game:start", { roomId: room.id, stage: room.stage, difficulty: room.difficulty, startedAt: Date.now() });
   });
 
@@ -204,6 +212,46 @@ io.on("connection", socket => {
     if (!throttle(socket, "chat", 8)) return socket.emit("server:error", "Bạn chat quá nhanh.");
     const text = cleanText(data.text, 500); if (!text) return;
     io.to("room:" + id).emit("room:chat", { uid, name: profiles.get(uid)?.name || "Người chơi", text, at: Date.now() });
+  });
+
+  // Shared boss state is stored on the server. The host owns AI/position; server owns shared HP.
+  socket.on("boss:init", data => {
+    const uid = uidOf(socket), room = rooms.get(socket.data.roomId);
+    if (!uid || !room || room.hostUid !== uid || !room.started || !data || typeof data !== "object") return;
+    const maxHp = Number(data.maxHp), hp = Number(data.hp);
+    if (!Number.isFinite(maxHp) || maxHp < 1 || maxHp > 100000000 || !Number.isFinite(hp)) return;
+    room.boss = {
+      stage: room.stage,
+      hp: Math.max(0, Math.min(maxHp, hp)),
+      maxHp,
+      alive: hp > 0,
+      x: Number.isFinite(Number(data.x)) ? Math.max(-50, Math.min(2000, Number(data.x))) : 390,
+      y: Number.isFinite(Number(data.y)) ? Math.max(-20, Math.min(700, Number(data.y))) : 500,
+      facing: Number(data.facing) < 0 ? -1 : 1,
+      isEnraged: !!data.isEnraged,
+      isShootingLaser: !!data.isShootingLaser,
+      isJumping: !!data.isJumping,
+      attackWarning: !!data.attackWarning,
+      attackPattern: Number(data.attackPattern) || 0,
+      animTimer: Number(data.animTimer) || 0,
+      attackTimer: Number(data.attackTimer) || 0,
+      laserTimer: Number(data.laserTimer) || 0,
+      jumpTimer: Number(data.jumpTimer) || 0
+    };
+    room.state = { kind: "boss", boss: room.boss };
+    io.to("room:" + room.id).emit("boss:state", { roomId: room.id, ...room.boss });
+  });
+
+  socket.on("boss:damage", data => {
+    const uid = uidOf(socket), room = rooms.get(socket.data.roomId);
+    if (!uid || !room || !room.started || !room.members.has(uid) || !room.boss || !room.boss.alive) return;
+    if (!throttle(socket, "boss-damage", 100, 10000)) return;
+    const amount = Number(data?.damage);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    room.boss.hp = Math.max(0, room.boss.hp - Math.min(500000, Math.round(amount)));
+    room.boss.alive = room.boss.hp > 0;
+    room.state = { kind: "boss", boss: room.boss };
+    io.to("room:" + room.id).emit("boss:state", { roomId: room.id, ...room.boss, lastDamager: uid, damage: Math.min(500000, Math.round(amount)) });
   });
 
   // Relay bounded player movement/animation snapshots to other party members.
@@ -233,11 +281,28 @@ io.on("connection", socket => {
   socket.on("game:state", data => {
     const uid = uidOf(socket), id = socket.data.roomId, room = rooms.get(id);
     if (!uid || !room || room.hostUid !== uid || !data || typeof data !== "object") return;
-    if (!throttle(socket, "game-state", 20)) return;
+    if (!throttle(socket, "game-state", 50, 10000)) return;
     const state = JSON.stringify(data);
     if (state.length > 50000) return socket.emit("server:error", "Dữ liệu trạng thái quá lớn.");
-    room.state = JSON.parse(state);
-    socket.to("room:" + id).emit("game:state", { fromUid: uid, state: room.state, at: Date.now() });
+    const decoded = JSON.parse(state);
+    if (decoded.kind === "boss" && room.boss) {
+      const b = decoded.boss || {};
+      const hostHp = Number(b.hp);
+      // Host synchronizes animation and position only; shared HP remains server-authoritative.
+      if (Number.isFinite(Number(b.x))) room.boss.x = Math.max(-50, Math.min(2000, Number(b.x)));
+      if (Number.isFinite(Number(b.y))) room.boss.y = Math.max(-20, Math.min(700, Number(b.y)));
+      if (Number.isFinite(Number(b.facing))) room.boss.facing = Number(b.facing) < 0 ? -1 : 1;
+      for (const key of ["isEnraged","isShootingLaser","isJumping","attackWarning"]) room.boss[key] = !!b[key];
+      for (const key of ["attackPattern","animTimer","attackTimer","laserTimer","jumpTimer"]) if (Number.isFinite(Number(b[key]))) room.boss[key] = Number(b[key]);
+      // Prevent a stale host snapshot from healing boss HP after server damage was applied.
+      room.boss.hp = Math.min(room.boss.hp, room.boss.maxHp);
+      room.boss.alive = room.boss.hp > 0;
+      room.state = {kind:"boss", boss:room.boss};
+      io.to("room:" + id).emit("boss:state", {roomId:room.id, ...room.boss});
+    } else {
+      room.state = decoded;
+      socket.to("room:" + id).emit("game:state", { fromUid: uid, state: room.state, at: Date.now() });
+    }
   });
 
   socket.on("game:action", data => {
