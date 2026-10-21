@@ -5274,7 +5274,7 @@
         burstCutscene={active:true,timer:2.7,maxTimer:2.7,title:'I AM ATOMIC',sub:'SHADOW • DOMINION OF THE ECLIPSE',color:'#a855f7',charId:char.id};
         player.isInvincible=true; player.invincibleTimer=2.7; player.atk=Math.round(baseAtk*1.5);
         if(typeof baseSpeed==='number') player.attackSpeed=baseSpeed*1.1;
-        const qRingRadius=Math.min(V_WIDTH*.44,V_HEIGHT*.78);
+        const qRingRadius=Math.max(8,Math.min(V_WIDTH*.40,(V_HEIGHT-GROUND_Y-4)/.32));
         spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius, '#a855f7',2.1,true);
         spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius*.68, '#e9d5ff',1.7,true);
         spawnLightPillar(V_WIDTH/2,GROUND_Y,Math.min(V_HEIGHT*.74,200),'#7e22ce',1.7);
