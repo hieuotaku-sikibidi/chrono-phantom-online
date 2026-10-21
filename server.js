@@ -210,7 +210,7 @@ io.on("connection", socket => {
   socket.on("player:state", data => {
     const uid = uidOf(socket), id = socket.data.roomId, room = rooms.get(id);
     if (!uid || !room || !room.members.has(uid) || !data || typeof data !== "object") return;
-    if (!throttle(socket, "player-state", 15)) return;
+    if (!throttle(socket, "player-state", 100, 10000)) return;
     const x = Number(data.x), y = Number(data.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const p = {
