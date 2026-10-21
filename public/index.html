@@ -1667,6 +1667,29 @@
       inventory: []
     };
 
+    // NEW-GAME BASELINE: every fresh session starts with the D-rank trainee and D-rank gear only.
+    // Higher-rank gear remains in the game catalogue for later acquisition.
+    function applyStarterBaseline() {
+      playerData.gold = 0;
+      playerData.shards = 0;
+      playerData.pity90 = 0;
+      playerData.isGuaranteedSSS = false;
+      playerData.selectedCharacter = 'char_d';
+      playerData.equipped = {
+        weapon: { id: 'w_d_1', level: 1 },
+        armor: { id: 'a_d_1', level: 1 },
+        headwear: { id: 'h_d_1', level: 1 },
+        ring: { id: 'r_d_1', level: 1 },
+        artifact: { id: 'art_d_1', level: 1 }
+      };
+      playerData.inventory = [];
+      CHARACTER_DATABASE.forEach(function (ch) {
+        if (ch.id === 'char_d') ch.unlocked = true;
+        else if (!ch.codeLocked) ch.unlocked = false;
+      });
+    }
+    applyStarterBaseline();
+
     function showToast(text, icon = "✨") {
       const toast = document.getElementById('gameToast');
       document.getElementById('toastMsg').innerText = text;
@@ -5213,6 +5236,10 @@
 
     function triggerSkillQ() {
       if (gameState !== 'PLAYING' || cdTimer.skillQ > 0) return;
+      if (playerData.selectedCharacter === 'char_shadow' && typeof window.__cpShadowQFixed === 'function') {
+        window.__cpShadowQFixed();
+        return;
+      }
       const cdrMult = 1 - ((player.cdr || 0) / 100);
       cdTimer.skillQ = COOLDOWNS.skillQ * cdrMult;
       const char = CHARACTER_DATABASE.find(c => c.id === playerData.selectedCharacter) || CHARACTER_DATABASE[0];
@@ -5325,6 +5352,18 @@
       if (gameState !== 'PLAYING') return;
       const w = getGearItem(playerData.equipped.weapon);
       if (!w) { showToast('Hãy trang bị vũ khí trước khi dùng Thần Kỹ.', '⚠️'); return; }
+      if (w.id === 'w_shadow_atomic') {
+        if (playerData.selectedCharacter !== 'char_shadow') {
+          showToast('Thần Khí Hắc Nguyệt chỉ có thể kích hoạt khi sử dụng Shadow.', '🔒');
+          return;
+        }
+        if (typeof window.__cpActivateShadowAtomicWeapon === 'function') {
+          window.__cpActivateShadowAtomicWeapon();
+        } else {
+          showToast('Thần Khí Atomic chưa tải đầy đủ. Hãy tải lại game.', '⚠️');
+        }
+        return;
+      }
       const skill = WEAPON_SKILL_PRESETS[w.id] || w.specialSkill || { name:'Vũ Khí Thức Tỉnh', mode:'cleave', duration:4, cd:18, atkBoost:1.2, icon:w.icon||'⚔️', color:'#fda4af', invincible:false };
       if (cdTimer.skillT > 0) { showToast(`Thần Kỹ đang hồi: ${cdTimer.skillT.toFixed(1)}s`, '⏳'); return; }
       const color = skill.color || '#fde047';
