@@ -333,6 +333,9 @@
     var impact = Math.max(0, Math.min(1, (p - .27) / .24));
     var aftermath = Math.max(0, Math.min(1, (p - .48) / .52));
     c.save();
+    // Fallback cut-in also ignores any residual world/camera transform.
+    if (typeof c.setTransform === 'function') c.setTransform(1,0,0,1,0,0);
+    c.beginPath(); c.rect(0,0,w,h); c.clip();
     c.globalCompositeOperation = 'source-over';
     var bg = c.createLinearGradient(0, 0, 0, h);
     bg.addColorStop(0, '#030208'); bg.addColorStop(.42, '#17052e'); bg.addColorStop(1, '#05030b');
@@ -524,6 +527,7 @@
         DOMAIN.hadSpeed = typeof player.attackSpeed === 'number' && isFinite(player.attackSpeed);
         DOMAIN.baseSpeed = DOMAIN.hadSpeed ? player.attackSpeed : 1;
         burstCutscene = { active:true, timer:2.75, maxTimer:2.75, title:'I AM ATOMIC', sub:'SHADOW • SSS+ ĐẶC BIỆT • ATOMIC DOMINION', color:'#a855f7', charId:'char_shadow' };
+        window.__cpShadowQCameraLockUntil = performance.now() + 2950;
         player.isInvincible = true; player.invincibleTimer = 2.75;
         screenShake = 0; screenFlash = .14;
         try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
@@ -541,14 +545,18 @@
           if (!e.alive) return;
           e.stunTimer = Math.max(e.stunTimer || 0, 2.2);
           damageEnemy(e, nukeDamage, '#a855f7', '☢ I AM ATOMIC', true);
-          spawnLightPillar(e.x, GROUND_Y, 92, '#c084fc', 1.15);
-          spawnMagicCircle(e.x, GROUND_Y, 120, '#7e22ce', 1.25, true);
+          var fxX = Math.max(36, Math.min(V_WIDTH-36, Number(e.x) || V_WIDTH/2));
+          var fxR = Math.max(12, Math.min(V_WIDTH*.18, fxX-4, V_WIDTH-fxX-4));
+          spawnLightPillar(fxX, GROUND_Y, Math.min(V_HEIGHT*.38, 96), '#c084fc', 1.0);
+          spawnMagicCircle(fxX, GROUND_Y, fxR, '#7e22ce', .9, true);
         });
         if (boss && boss.alive) {
           boss.stunTimer = Math.max(boss.stunTimer || 0, 2.5);
           damageBoss(nukeDamage * 2, '☢ I AM ATOMIC', true, '#c084fc');
-          spawnLightPillar(boss.x, GROUND_Y, 170, '#a855f7', 1.55);
-          spawnMagicCircle(boss.x, GROUND_Y, 190, '#7e22ce', 1.45, true);
+          var bossFxX = Math.max(36, Math.min(V_WIDTH-36, Number(boss.x) || V_WIDTH/2));
+          var bossFxR = Math.max(12, Math.min(V_WIDTH*.20, bossFxX-4, V_WIDTH-bossFxX-4));
+          spawnLightPillar(bossFxX, GROUND_Y, Math.min(V_HEIGHT*.48, 130), '#a855f7', 1.2);
+          spawnMagicCircle(bossFxX, GROUND_Y, bossFxR, '#7e22ce', 1.0, true);
         }
         spawnParticles(V_WIDTH/2, GROUND_Y-65, 72, '#a855f7', 1.8);
         spawnParticles(V_WIDTH/2, GROUND_Y-65, 38, '#f5d0fe', 1.05);
@@ -561,7 +569,7 @@
           DOMAIN.buffExpiresAt = DOMAIN.expiresAt;
           if (typeof applyPlayerStatsToCombat === 'function') applyPlayerStatsToCombat();
           player.attackSpeed = (DOMAIN.hadSpeed ? DOMAIN.baseSpeed : 1) * 1.1;
-          screenShake = Math.max(screenShake, 12);
+          screenShake = 0;
           showToast('LÃNH ĐỊA ATOMIC • ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY', '☄️');
           setTimeout(function () { if (performance.now() >= DOMAIN.buffExpiresAt) { DOMAIN.restoreStats ? DOMAIN.restoreStats() : (DOMAIN.buffActive = false); showToast('Lãnh địa Shadow đã tan biến.', '🌌'); } }, 10030);
         }, 2750);
