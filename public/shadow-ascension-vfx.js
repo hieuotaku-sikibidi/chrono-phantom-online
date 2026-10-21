@@ -191,19 +191,22 @@
       var dome=c.createRadialGradient(cx,ground-62,18,cx,ground-62,w*.72);
       dome.addColorStop(0,'rgba(147,51,234,.15)');dome.addColorStop(.6,'rgba(88,28,135,.16)');dome.addColorStop(1,'rgba(5,1,15,0)');
       c.fillStyle=dome;c.fillRect(0,0,w,ground);
+      // Keep every seal inside the 480x270 play viewport instead of drawing rings beyond both edges.
+      var domainOuterRx=Math.min(w*.46,w*.62);
       c.globalAlpha=.6;c.strokeStyle='#a855f7';c.lineWidth=1.2;
-      c.beginPath();c.ellipse(cx,ground,w*.62,34,0,Math.PI,Math.PI*2);c.stroke();
-      c.setLineDash([7,5]);c.beginPath();c.ellipse(cx,ground-49,w*.54,105,t*.025,Math.PI,Math.PI*2);c.stroke();c.setLineDash([]);
+      c.beginPath();c.ellipse(cx,ground,domainOuterRx,34,0,Math.PI,Math.PI*2);c.stroke();
+      c.setLineDash([7,5]);c.beginPath();c.ellipse(cx,ground-49,Math.min(w*.46,w*.54),105,t*.025,Math.PI,Math.PI*2);c.stroke();c.setLineDash([]);
       for(var ring=0;ring<3;ring++){
+        var runeRx=Math.min(w*.46,w*(.28+ring*.14));
         c.save();c.translate(cx,ground-2);c.rotate(t*(ring%2?-.25:.19)*(ring+1));
         c.globalAlpha=.35;c.strokeStyle=ring===1?'#e9d5ff':'#7c3aed';c.lineWidth=ring===1?1:.7;
-        c.setLineDash(ring===2?[3,7]:[12,4,2,4]);c.beginPath();c.ellipse(0,0,w*(.28+ring*.14),12+ring*7,0,0,Math.PI*2);c.stroke();c.setLineDash([]);
+        c.setLineDash(ring===2?[3,7]:[12,4,2,4]);c.beginPath();c.ellipse(0,0,runeRx,12+ring*7,0,0,Math.PI*2);c.stroke();c.setLineDash([]);
         for(var rune=0;rune<18;rune++){
           var ra=rune*Math.PI*2/18;
           c.fillStyle=rune%2?'#c084fc':'#67e8f9';
-          c.beginPath();c.moveTo(Math.cos(ra)*w*(.28+ring*.14),Math.sin(ra)*(12+ring*7));
-          c.lineTo(Math.cos(ra)* (w*(.28+ring*.14)+3),Math.sin(ra)*(16+ring*7));
-          c.lineTo(Math.cos(ra)* (w*(.28+ring*.14)-3),Math.sin(ra)*(16+ring*7));c.closePath();c.fill();
+          c.beginPath();c.moveTo(Math.cos(ra)*runeRx,Math.sin(ra)*(12+ring*7));
+          c.lineTo(Math.cos(ra)*(runeRx+3),Math.sin(ra)*(16+ring*7));
+          c.lineTo(Math.cos(ra)*(runeRx-3),Math.sin(ra)*(16+ring*7));c.closePath();c.fill();
         }
         c.restore();
       }
@@ -220,7 +223,11 @@
     var w=V_WIDTH,h=V_HEIGHT,g=GROUND_Y,cx=w*.5,cy=g-60;
     var t=typeof gameTime==='number'?gameTime:0;
     var charge=smooth(p/.27), det=smooth((p-.23)/.23), decay=smooth((p-.48)/.52);
-    c.save(); c.globalCompositeOperation='source-over';
+    c.save();
+    // Draw the ultimate in viewport coordinates, not with any leftover world/camera transform.
+    if (typeof c.setTransform === 'function') c.setTransform(1,0,0,1,0,0);
+    c.beginPath(); c.rect(0,0,w,h); c.clip();
+    c.globalCompositeOperation='source-over';
     var sky=c.createLinearGradient(0,0,0,h);
     sky.addColorStop(0,'#020107');sky.addColorStop(.44,'#10051e');sky.addColorStop(1,'#05030b');
     c.fillStyle=sky;c.fillRect(0,0,w,h);
@@ -275,7 +282,9 @@
     if(p>.22){
       c.save();c.globalCompositeOperation='lighter';
       var impact=clamp((p-.22)/.33,0,1);
-      var ringRadius=8+impact*Math.max(w,h)*1.12;
+      // The shock ring grows only within the viewport width; the previous max(w,h)*1.12
+      // made it several screen-widths wide and looked like the Q escaped the screen.
+      var ringRadius=8+impact*Math.min(w*.46,h*.78);
       for(var ring=0;ring<6;ring++){
         var rr=ringRadius*(1-ring*.105);
         c.globalAlpha=(.85-ring*.105)*(1-decay*.75);
@@ -283,7 +292,8 @@
         c.lineWidth=ring===0?4.2:(ring===1?2.6:1.1);
         c.beginPath();c.ellipse(cx,g,rr,12+ring*8+impact*15,0,0,Math.PI*2);c.stroke();
       }
-      var radius=18+impact*Math.max(w,h)*.95;
+      var cornerReach=Math.hypot(w/2,Math.max(cy,h-cy));
+      var radius=18+impact*Math.max(0,cornerReach-18);
       var flash=c.createRadialGradient(cx,cy,1,cx,cy,radius);
       flash.addColorStop(0,'rgba(255,255,255,'+(.98*(1-decay*.96))+')');
       flash.addColorStop(.09,'rgba(250,232,255,'+(.98*(1-decay*.9))+')');
@@ -307,13 +317,17 @@
       /* Lightning crown arcs and rays rip through the entire frame. */
       for(var ray=0;ray<36;ray++){
         var a=ray*Math.PI*2/36+t*.07;
-        var len=(35+impact*(Math.max(w,h)*.83))*(ray%4===0?1:.56);
+        var rayDx=Math.cos(a), rayDy=Math.sin(a)*.6;
+        var reachX=rayDx>0?(w-8-cx)/rayDx:(rayDx<0?(8-cx)/rayDx:Infinity);
+        var reachY=rayDy>0?(h-8-cy)/rayDy:(rayDy<0?(8-cy)/rayDy:Infinity);
+        var maxRay=Math.max(0,Math.min(reachX,reachY));
+        var len=Math.min(maxRay,35+impact*maxRay)*(ray%4===0?1:.56);
         c.globalAlpha=(.85*(ray%4===0?1:.54))*(1-decay*.92);
         c.strokeStyle=ray%4===0?'#ffffff':(ray%2?'#c084fc':'#e9d5ff');
         c.lineWidth=ray%6===0?2.8:1;
-        c.beginPath();c.moveTo(cx+Math.cos(a)*8,cy+Math.sin(a)*5);
-        c.lineTo(cx+Math.cos(a)*len*.56+Math.sin(t*15+ray)*4,cy+Math.sin(a)*len*.35);
-        c.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len*.6);c.stroke();
+        c.beginPath();c.moveTo(cx+rayDx*8,cy+Math.sin(a)*5);
+        c.lineTo(cx+rayDx*len*.56+Math.sin(t*15+ray)*4,cy+Math.sin(a)*len*.35);
+        c.lineTo(cx+rayDx*len,cy+rayDy*len);c.stroke();
       }
       c.restore();
     }
@@ -323,9 +337,9 @@
     for(var d=0;d<58;d++){
       var frac=(p*(.8+(d%9)*.19)+d*.079)%1;
       var angle=d*2.399+t*(d%2?.22:-.18);
-      var dist=8+frac*w*.78;
-      var dx=cx+Math.cos(angle)*dist;
-      var dy=cy+Math.sin(angle)*dist*.62+frac*frac*49;
+      var dist=8+frac*Math.min(w*.43,h*.72);
+      var dx=clamp(cx+Math.cos(angle)*dist,4,w-4);
+      var dy=clamp(cy+Math.sin(angle)*dist*.62+frac*frac*49,4,h-4);
       c.save();c.translate(dx,dy);c.rotate(t*(d%2?2.4:-1.8)+d);
       c.globalAlpha=(.7-frac*.35)*(p>.22?1:.35);
       c.fillStyle=d%5===0?'#f5d0fe':(d%3===0?'#7e22ce':'#20152e');
