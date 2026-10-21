@@ -5142,6 +5142,21 @@
       const theme = getCharacterVisualTheme(char.id);
       const label = char.skillLabels.r;
       sfxSwordSlash();
+
+      // Shadow's custom R is drawn by shadow-ascension-vfx.js; skip the legacy D-rank
+      // projectile/slash set that used a fixed 62px radius and spilled past the frame.
+      if (char.id === 'char_shadow') {
+        const rOriginX = Math.max(18, Math.min(V_WIDTH - 18, player.x + player.facing * 18));
+        const rOriginY = Math.max(26, Math.min(GROUND_Y - 12, player.y - 22));
+        const rSideRoom = Math.max(8, Math.min(rOriginX - 4, V_WIDTH - rOriginX - 4));
+        const rCoreRadius = Math.max(8, Math.min(32, rSideRoom));
+        spawnMagicCircle(rOriginX, rOriginY, rCoreRadius, theme.main, 0.48, false);
+        damageSkillTargets(Math.round(player.atk * 1.15), theme.main, `${theme.icon} ${label}!`, 'forward', { range: V_WIDTH, stun: 0.22 });
+        screenShake = 0;
+        screenFlash = Math.max(screenFlash, 0.12);
+        return;
+      }
+
       spawnMagicCircle(player.x + player.facing * 18, player.y - 22, 35, theme.main, 0.65, false);
       spawnCustomCharVfx(player.x + player.facing * 28, player.y - 25, theme.vfxType, player.facing, 1.4);
       screenShake = 5;
