@@ -578,6 +578,8 @@
     var token = ((window.__cpShadowQState && window.__cpShadowQState.token) || 0) + 1;
     window.__cpShadowQState = {token:token};
     var castTime = 2.85;
+    // Persist the camera lock for the full Q duration even if another wrapper touches the cut-in state.
+    window.__cpShadowQCameraLockUntil = performance.now() + castTime * 1000 + 200;
     burstCutscene = {
       active:true, timer:castTime, maxTimer:castTime,
       title:'I AM ATOMIC', sub:'SHADOW • SSS+ ĐẶC BIỆT • ATOMIC DOMINION',
@@ -590,24 +592,30 @@
     player.animFrame = 2;
 
     /* Keep the flash below the cinematic layer; the old .7-.9 white flash hid the Q animation. */
-    screenShake = Math.max(screenShake || 0, 26);
+    screenShake = 0;
     screenFlash = Math.max(screenFlash || 0, .14);
     try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
     try { if (typeof sfxBossSkill === 'function') sfxBossSkill(30); } catch (_) {}
     try {
-      spawnMagicCircle(V_WIDTH/2, GROUND_Y, 345, '#a855f7', 3.4, true);
-      spawnMagicCircle(V_WIDTH/2, GROUND_Y, 238, '#f5d0fe', 2.7, true);
-      spawnLightPillar(V_WIDTH/2, GROUND_Y, 260, '#7e22ce', 2.5);
-      for (var r = 0; r < 24; r++) {
-        var a = Math.PI * 2 * r / 24;
+      var qRingRadius = Math.min(V_WIDTH*.44, V_HEIGHT*.78);
+      spawnMagicCircle(V_WIDTH/2, GROUND_Y, qRingRadius, '#a855f7', 2.1, true);
+      spawnMagicCircle(V_WIDTH/2, GROUND_Y, qRingRadius*.68, '#f5d0fe', 1.65, true);
+      spawnLightPillar(V_WIDTH/2, GROUND_Y, Math.min(V_HEIGHT*.74, 200), '#7e22ce', 1.7);
+      for (var r = 0; r < 20; r++) {
+        var a = Math.PI * 2 * r / 20;
+        var innerR = Math.min(V_WIDTH*.16, 72);
+        var outerR = Math.min(V_WIDTH*.43, 205);
+        var innerY = Math.min(V_HEIGHT*.045, 12);
+        var outerY = Math.min(V_HEIGHT*.07, 19);
         spawnDimensionCrack(
-          V_WIDTH/2 + Math.cos(a)*80, GROUND_Y + Math.sin(a)*18,
-          V_WIDTH/2 + Math.cos(a)*220, GROUND_Y + Math.sin(a)*28,
-          r%2 ? '#c084fc' : '#f5d0fe', 3.2, 1.05
+          V_WIDTH/2 + Math.cos(a)*innerR, GROUND_Y + Math.sin(a)*innerY,
+          V_WIDTH/2 + Math.cos(a)*outerR, GROUND_Y + Math.sin(a)*outerY,
+          r%2 ? '#c084fc' : '#f5d0fe', 2.7, .72
         );
       }
-      spawnParticles(V_WIDTH/2, GROUND_Y-65, 110, '#a855f7', 3.4);
-      spawnParticles(V_WIDTH/2, GROUND_Y-65, 56, '#f5d0fe', 2.3);
+      // Lower particle speed/count: the former high-speed burst scattered off the arena edges.
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 72, '#a855f7', 1.8);
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 38, '#f5d0fe', 1.05);
       showToast('I AM ATOMIC — VỤ NỔ NGUYÊN TỬ!', '影');
     } catch (_) {}
 
@@ -621,8 +629,10 @@
       try {
         enemy.stunTimer = Math.max(enemy.stunTimer || 0, 2.2);
         damageEnemy(enemy, nukeDamage, '#a855f7', '☢ I AM ATOMIC', true);
-        spawnLightPillar(enemy.x, GROUND_Y, 92, '#c084fc', 1.15);
-        spawnMagicCircle(enemy.x, GROUND_Y, 120, '#7e22ce', 1.25, true);
+        var enemyFxX = clamp(Number(enemy.x) || V_WIDTH/2, 36, V_WIDTH-36);
+        var enemyFxRadius = Math.max(12, Math.min(V_WIDTH*.18, enemyFxX-4, V_WIDTH-enemyFxX-4));
+        spawnLightPillar(enemyFxX, GROUND_Y, Math.min(V_HEIGHT*.38, 96), '#c084fc', 1.0);
+        spawnMagicCircle(enemyFxX, GROUND_Y, enemyFxRadius, '#7e22ce', .9, true);
       } catch (_) {}
     });
 
@@ -630,8 +640,10 @@
     if (targetBoss && targetBoss.alive) {
       try {
         targetBoss.stunTimer = Math.max(targetBoss.stunTimer || 0, 2.5);
-        spawnLightPillar(targetBoss.x, GROUND_Y, 170, '#a855f7', 1.55);
-        spawnMagicCircle(targetBoss.x, GROUND_Y, 190, '#7e22ce', 1.45, true);
+        var bossFxX = clamp(Number(targetBoss.x) || V_WIDTH/2, 36, V_WIDTH-36);
+        var bossFxRadius = Math.max(12, Math.min(V_WIDTH*.20, bossFxX-4, V_WIDTH-bossFxX-4));
+        spawnLightPillar(bossFxX, GROUND_Y, Math.min(V_HEIGHT*.48, 130), '#a855f7', 1.2);
+        spawnMagicCircle(bossFxX, GROUND_Y, bossFxRadius, '#7e22ce', 1.0, true);
       } catch (_) {}
       try { damageBoss(nukeDamage * 2, '☢ I AM ATOMIC', true, '#c084fc'); } catch (_) {}
     }
