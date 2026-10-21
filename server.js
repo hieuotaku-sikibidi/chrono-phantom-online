@@ -66,6 +66,16 @@ function roomSummary(room) {
   };
 }
 
+app.get("/download-html", (req, res) => {
+  res.download(
+    path.join(__dirname, "public", "Chrono-Phantom-Online.html"),
+    "Chrono-Phantom-Online.html",
+    err => {
+      if (err && !res.headersSent) res.status(500).send("Không thể tải tệp HTML lúc này.");
+    }
+  );
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/health", (_req, res) => res.json({ ok: true, service: "Chrono Phantom Online", uptime: Math.floor(process.uptime()), onlinePlayers: [...socketsByUid.values()].reduce((n, s) => n + (s.size ? 1 : 0), 0), rooms: rooms.size }));
 app.get("/api/status", (_req, res) => res.json({ ok: true, onlinePlayers: [...profiles.keys()].filter(uid => (socketsByUid.get(uid)?.size || 0) > 0).length, rooms: [...rooms.values()].map(roomSummary) }));
