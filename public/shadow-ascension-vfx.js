@@ -807,6 +807,12 @@
         if(ready&&cdTimer.skillR>0){
           pushFx({kind:'R',x:x,y:y,facing:dir,duration:1.08});
           player.state='ATTACK';player.animTimer=0;player.animFrame=2;
+          // Keep the model in its strike pose briefly, but never leave it stuck in ATTACK.
+          window.__cpShadowVisualActionToken = (Number(window.__cpShadowVisualActionToken) || 0) + 1;
+          var rActionToken = window.__cpShadowVisualActionToken;
+          setTimeout(function(){
+            if(window.__cpShadowVisualActionToken===rActionToken && player.state==='ATTACK') player.state='IDLE';
+          },240);
           // R is a screen-wide formation; keep the camera steady so blades stay aligned.
           screenShake=0;
           screenFlash=Math.max(screenFlash||0,.14);
