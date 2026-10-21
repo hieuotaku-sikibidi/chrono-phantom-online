@@ -290,7 +290,8 @@
         c.globalAlpha=(.85-ring*.105)*(1-decay*.75);
         c.strokeStyle=ring%3===0?'#ffffff':(ring%2?'#e9d5ff':'#a855f7');
         c.lineWidth=ring===0?4.2:(ring===1?2.6:1.1);
-        c.beginPath();c.ellipse(cx,g,rr,12+ring*8+impact*15,0,0,Math.PI*2);c.stroke();
+        var ringRy=Math.min(12+ring*8+impact*15,Math.max(4,h-g-4));
+        c.beginPath();c.ellipse(cx,g,rr,ringRy,0,0,Math.PI*2);c.stroke();
       }
       var cornerReach=Math.hypot(w/2,Math.max(cy,h-cy));
       var radius=18+impact*Math.max(0,cornerReach-18);
@@ -597,7 +598,9 @@
     try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
     try { if (typeof sfxBossSkill === 'function') sfxBossSkill(30); } catch (_) {}
     try {
-      var qRingRadius = Math.min(V_WIDTH*.44, V_HEIGHT*.78);
+      // Ground circles are vertically squashed to .32 in drawMagicCircles; size them to the
+      // real space below GROUND_Y so the lower arc cannot be cut off by the canvas edge.
+      var qRingRadius = Math.max(8, Math.min(V_WIDTH*.40, (V_HEIGHT-GROUND_Y-4)/.32));
       spawnMagicCircle(V_WIDTH/2, GROUND_Y, qRingRadius, '#a855f7', 2.1, true);
       spawnMagicCircle(V_WIDTH/2, GROUND_Y, qRingRadius*.68, '#f5d0fe', 1.65, true);
       spawnLightPillar(V_WIDTH/2, GROUND_Y, Math.min(V_HEIGHT*.74, 200), '#7e22ce', 1.7);
@@ -614,8 +617,8 @@
         );
       }
       // Lower particle speed/count: the former high-speed burst scattered off the arena edges.
-      spawnParticles(V_WIDTH/2, GROUND_Y-65, 72, '#a855f7', 1.8);
-      spawnParticles(V_WIDTH/2, GROUND_Y-65, 38, '#f5d0fe', 1.05);
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 64, '#a855f7', 1.0);
+      spawnParticles(V_WIDTH/2, GROUND_Y-65, 32, '#f5d0fe', .62);
       showToast('I AM ATOMIC — VỤ NỔ NGUYÊN TỬ!', '影');
     } catch (_) {}
 
