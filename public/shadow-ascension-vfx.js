@@ -412,11 +412,124 @@
         }
         c.globalAlpha=.65*(1-p);c.strokeStyle='#e9d5ff';c.lineWidth=1.2;
         c.beginPath();c.moveTo(ox,oy);c.lineTo(ox+dir*100,oy-27);c.moveTo(ox,oy);c.lineTo(ox+dir*100,oy+27);c.stroke();
+      } else if(f.kind==='ATOMIC'){
+        drawAtomicChainFx(c,f,age,p);
       }
       c.restore();
     }
   }
   function wSafe(){return typeof V_WIDTH==='number'?V_WIDTH:480;}
+
+
+  function triggerShadowAtomicWeapon() {
+    if (gameState !== 'PLAYING') return true;
+    var weaponRef = playerData && playerData.equipped ? playerData.equipped.weapon : null;
+    var weapon = typeof getGearItem === 'function' ? getGearItem(weaponRef) : null;
+    if (!weapon || weapon.id !== 'w_shadow_atomic') return false;
+    if (!shadowSelected()) {
+      showToast('Thần Khí Hắc Nguyệt chỉ cộng hưởng với Shadow.', '🔒');
+      return true;
+    }
+    if (cdTimer.skillT > 0) {
+      showToast('ATOMIC DOMINION đang hồi: ' + cdTimer.skillT.toFixed(1) + 's', '⏳');
+      return true;
+    }
+    var targetBoss = typeof boss !== 'undefined' ? boss : null;
+    if (!targetBoss || !targetBoss.alive) {
+      showToast('Chưa có boss để khóa mục tiêu Atomic.', '☢️');
+      return true;
+    }
+
+    var color = '#c084fc';
+    var cdr = clamp((player.cdr || 0) / 100, 0, .75);
+    cdTimer.skillT = 34 * (1 - cdr);
+    sssBuffBaseAtk = player.baseAtk || player.atk;
+    sssBuffAppliedAtkBoost = 1.6;
+    sssBuffActiveTimer = 3.1;
+    activeWeaponSkillMode = 'shadow_atomic';
+    activeWeaponSkillColor = color;
+    sssPassiveTickTimer = 0;
+    if (typeof syncCombatAttack === 'function') syncCombatAttack();
+    player.state = 'ATTACK'; player.animTimer = 0; player.animFrame = 2;
+    player.isInvincible = true; player.invincibleTimer = Math.max(player.invincibleTimer || 0, 3.1);
+    screenShake = Math.max(screenShake || 0, 10);
+    screenFlash = Math.max(screenFlash || 0, .28);
+    try { sfxBossSkill(6); } catch (_) { try { sfxDash(); } catch (_) {} }
+    try {
+      spawnMagicCircle(player.x, GROUND_Y, 78, color, 1.15, true);
+      spawnMagicCircle(player.x, player.y - 25, 31, '#67e8f9', .9, false);
+      spawnLightPillar(player.x, GROUND_Y, 51, color, .7);
+      spawnParticles(player.x, player.y - 28, 30, color, 1.8);
+      spawnDamageText(player.x, player.y - 55, 'ATOMIC DOMINION', color, true, 'THẦN KHÍ • NGŨ TRỌNG BÙNG NỔ');
+    } catch (_) {}
+    showToast('ATOMIC DOMINION: 5 vụ nổ • mỗi vụ 8% máu tối đa boss!', '☢️');
+
+    /* Pin the target object to avoid redirecting delayed hits after a stage swap. */
+    for (var hitIndex = 0; hitIndex < 5; hitIndex++) {
+      (function (index) {
+        setTimeout(function () {
+          if (gameState !== 'PLAYING' || !shadowSelected() || boss !== targetBoss) return;
+          var wasAlive = !!targetBoss.alive;
+          var tx = Number(targetBoss.x) || V_WIDTH * .72;
+          var ty = (Number(targetBoss.y) || GROUND_Y - 35) - 28;
+          pushFx({kind:'ATOMIC', x:tx, y:ty, duration:.86, blastIndex:index + 1, total:5});
+          screenShake = Math.max(screenShake || 0, 12 + index);
+          screenFlash = Math.max(screenFlash || 0, index === 0 ? .44 : .28);
+          try {
+            spawnMagicCircle(tx, GROUND_Y, 76 + index * 5, index % 2 ? '#67e8f9' : color, .8, true);
+            spawnLightPillar(tx, GROUND_Y, 65 + index * 8, color, .78);
+            spawnParticles(tx, ty, 28, index % 2 ? '#67e8f9' : '#d8b4fe', 2);
+            spawnDimensionCrack(tx - 48, ty - 18, tx + 52, ty - 7, '#f5d0fe', 3.2, .42);
+            try { sfxBossSkill(index % 2 ? 6 : 7); } catch (_) {}
+          } catch (_) {}
+          if (wasAlive && targetBoss.alive) {
+            var maxHp = Math.max(1, Number(targetBoss.maxHp) || Number(targetBoss.hp) || 1);
+            var rawDamage = Math.max(1, Math.round(maxHp * .08));
+            var safeDamage = Number.isFinite(Number(targetBoss.hp)) ? Math.min(rawDamage, Math.max(1, Number(targetBoss.hp))) : rawDamage;
+            damageBoss(safeDamage, 'ATOMIC ' + (index + 1) + '/5 • 8% MAX HP', true, index % 2 ? '#67e8f9' : color);
+          }
+        }, index * 520);
+      })(hitIndex);
+    }
+    return true;
+  }
+
+  function drawAtomicChainFx(c, f, age, progress) {
+    var p = clamp(progress, 0, 1), fade = 1 - p;
+    var radius = 14 + smooth(p) * 205;
+    var pulse = .5 + .5 * Math.sin(age * 30 + f.blastIndex);
+    c.save(); c.translate(f.x, f.y); c.globalCompositeOperation = 'lighter';
+    var core = c.createRadialGradient(0, 0, 1, 0, 0, radius * .72);
+    core.addColorStop(0, 'rgba(255,255,255,' + (.9 * fade) + ')');
+    core.addColorStop(.16, 'rgba(245,208,254,' + (.82 * fade) + ')');
+    core.addColorStop(.4, 'rgba(192,132,252,' + (.46 * fade) + ')');
+    core.addColorStop(1, 'rgba(76,29,149,0)');
+    c.globalAlpha = .8 * fade; c.fillStyle = core;
+    c.beginPath(); c.arc(0, 0, radius * .72, 0, Math.PI * 2); c.fill();
+    for (var ring = 0; ring < 5; ring++) {
+      var rr = radius * (.35 + ring * .16);
+      c.globalAlpha = (.9 - ring * .13) * fade;
+      c.strokeStyle = ring % 3 === 0 ? '#ffffff' : (ring % 2 ? '#67e8f9' : '#c084fc');
+      c.lineWidth = ring === 0 ? 3.3 : (ring === 1 ? 2.1 : 1);
+      c.beginPath(); c.ellipse(0, 0, rr, rr * (.48 + ring * .035), age * (ring % 2 ? -.9 : .7), 0, Math.PI * 2); c.stroke();
+    }
+    for (var ray = 0; ray < 24; ray++) {
+      var a = ray * Math.PI * 2 / 24 + age * (ray % 2 ? .7 : -.45);
+      var len = radius * (ray % 4 === 0 ? 1.22 : .82) * (.88 + .12 * pulse);
+      c.globalAlpha = (ray % 4 === 0 ? .92 : .48) * fade;
+      c.strokeStyle = ray % 4 === 0 ? '#ffffff' : (ray % 2 ? '#d8b4fe' : '#67e8f9');
+      c.lineWidth = ray % 6 === 0 ? 2 : .8;
+      c.beginPath(); c.moveTo(Math.cos(a) * 5, Math.sin(a) * 3);
+      c.lineTo(Math.cos(a) * len * .52, Math.sin(a) * len * .37 + Math.sin(age * 18 + ray) * 4);
+      c.lineTo(Math.cos(a) * len, Math.sin(a) * len * .55); c.stroke();
+    }
+    c.globalAlpha = .72 * fade; c.strokeStyle = '#e9d5ff'; c.lineWidth = 1.4;
+    c.beginPath(); c.arc(0, 0, 18 + (1 - p) * 28, age * 2, age * 2 + Math.PI * 1.6); c.stroke();
+    c.globalAlpha = fade; c.fillStyle = '#f5d0fe'; c.font = '900 8px monospace'; c.textAlign = 'center';
+    c.shadowColor = '#a855f7'; c.shadowBlur = 10;
+    c.fillText('ATOMIC ' + f.blastIndex + '/5', 0, -Math.max(20, radius * .58));
+    c.restore();
+  }
 
   function install() {
     if(typeof CHARACTER_DATABASE==='undefined'||typeof playerData==='undefined'){
@@ -427,6 +540,20 @@
       sh.rankLabel='SSS+ ĐẶC BIỆT';
       sh.skillLabels={e:'E: SHADOW STEP — VOID WALK',r:'R: BLACK KNIGHT PARADE',q:'Q: I AM ATOMIC'};
       sh.desc='Shadow Emperor: Void Walk, Black Knight Parade và I AM ATOMIC — xóa sổ chiến trường, rồi mở lãnh địa thành phố đổ nát trong 10 giây.';
+    }
+
+    var oldT=window.triggerSkillT;
+    if(typeof oldT==='function'&&!window.__cpShadowAtomicWeaponWrapped){
+      window.__cpShadowAtomicWeaponWrapped=true;
+      window.triggerSkillT=function(){
+        var weaponRef=typeof playerData!=='undefined'&&playerData.equipped?playerData.equipped.weapon:null;
+        var weapon=typeof getGearItem==='function'?getGearItem(weaponRef):null;
+        if(weapon&&weapon.id==='w_shadow_atomic'){
+          var handled=triggerShadowAtomicWeapon();
+          if(handled!==false)return;
+        }
+        return oldT.apply(this,arguments);
+      };
     }
 
     var oldE=window.triggerSkillE;
