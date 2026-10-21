@@ -4807,9 +4807,17 @@
 
         spawnDamageText(boss.x, boss.y - 70, "💀 BOSS BỊ TIÊU DIỆT!", '#fde047', true, 'VICTORY');
 
-        setTimeout(() => {
+        // Let Shadow's 2.85s Atomic cut-in finish before the stage-clear overlay appears.
+        // Boss-death flash remains behind the cut-in, and this timer continues only while the match is active.
+        const finishStageClearAfterCutIn = () => {
+          if (gameState !== 'PLAYING') return;
+          if (burstCutscene.active && burstCutscene.charId === 'char_shadow') {
+            setTimeout(finishStageClearAfterCutIn, 80);
+            return;
+          }
           onStageClear();
-        }, 750);
+        };
+        setTimeout(finishStageClearAfterCutIn, 750);
       }
     }
 
@@ -6130,13 +6138,18 @@
 
       drawParticles(ctx);
       drawFloatingTexts(ctx);
-      drawBurstCutscene(ctx);
 
+      // Draw generic flashes behind ultimate cut-ins; otherwise boss-death flash (.85)
+      // paints over Shadow's entire Atomic animation and makes Q look broken.
       if (screenFlash > 0) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${screenFlash})`;
-        ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+        if (!burstCutscene.active) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${screenFlash})`;
+          ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+        }
         screenFlash = Math.max(0, screenFlash - dt * 3.5);
       }
+
+      drawBurstCutscene(ctx);
 
       ctx.restore();
       requestAnimationFrame(mainGameLoop);
