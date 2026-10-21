@@ -4836,8 +4836,17 @@
       const mainColor = theme.main;
       const subColor = theme.sub;
       const attackRadius = 40 + step * 11;
-      const slashX = player.x + player.facing * 22;
-      const slashY = player.y - 22;
+      const slashX = Math.max(14, Math.min(V_WIDTH - 14, player.x + player.facing * 22));
+      const slashY = Math.max(28, Math.min(GROUND_Y - 8, player.y - 22));
+
+      // Shadow's basic chain gets its own short, viewport-bounded sword choreography.
+      if (char.id === 'char_shadow') {
+        window.__cpShadowBasicSwing = {
+          characterId:'char_shadow', start:performance.now(), duration:.34,
+          x:Math.max(24,Math.min(V_WIDTH-24,slashX)), y:Math.max(28,Math.min(GROUND_Y-10,slashY)),
+          facing:player.facing, step:step, color:mainColor, subColor:subColor
+        };
+      }
 
       // Mỗi nhân vật tung ra hiệu ứng đặc trưng riêng khi vung vũ khí!
       spawnCustomCharVfx(slashX + player.facing * 12, slashY, theme.vfxType, player.facing, 0.75 + step * 0.2);
@@ -6095,10 +6104,12 @@
       broadcastOnlinePlayerState(timestamp);
 
       ctx.save();
-      // Pin the viewport for the whole Q animation, even if another callback briefly
-      // clears burstCutscene.active. Q camera shake is discarded, not replayed afterward.
+      // Q and the 10-second Atomic domain must stay aligned with the viewport.
+      // A moving canvas transform made the fixed-domain rings appear to jump or split apart.
       const qLockUntil = Number(window.__cpShadowQCameraLockUntil) || 0;
-      const pinUltimateCamera = !!(burstCutscene && burstCutscene.active) || performance.now() < qLockUntil;
+      const domainFx = window.__cpShadowDomain;
+      const shadowDomainActive = !!(domainFx && domainFx.active && performance.now() < (Number(domainFx.expiresAt) || 0));
+      const pinUltimateCamera = !!(burstCutscene && burstCutscene.active) || performance.now() < qLockUntil || shadowDomainActive;
       if (pinUltimateCamera) {
         screenShake = 0;
       } else if (screenShake > 0) {
