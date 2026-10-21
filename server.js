@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 const crypto = require("crypto");
 
@@ -55,30 +56,17 @@ function addFriend(a, b) {
   friendSets.get(a).add(b); friendSets.get(b).add(a);
 }
 function roomSummary(room) {
-  return { id: room.id, hostUid: room.hostUid, members: [...room.members].map(uid => ({ uid, name: profiles.get(uid)?.name || "Người chơi" })), createdAt: room.createdAt };
+  return {
+    id: room.id, hostUid: room.hostUid, name: room.name || "Phòng đột kích",
+    privacy: room.privacy || "public", stage: room.stage || 10, difficulty: room.difficulty || "hard",
+    members: [...room.members].map(uid => {
+      const p = profiles.get(uid) || {};
+      return { uid, name: p.name || "Người chơi", avatar: p.avatar || "⚔️", title: p.title || "" };
+    }), createdAt: room.createdAt
+  };
 }
 
-app.get("/", (_req, res) => res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chrono Phantom Online</title><style>
-:root{color-scheme:dark}body{font:16px system-ui;max-width:850px;margin:32px auto;padding:0 16px;background:#0b1020;color:#eef2ff}h1{color:#c4b5fd}section{background:#151c31;border:1px solid #303957;border-radius:14px;padding:18px;margin:14px 0}input,button{font:inherit;border-radius:8px;padding:10px;border:1px solid #475569;box-sizing:border-box}input{background:#0f172a;color:white;width:100%;margin:5px 0}button{background:#7c3aed;color:white;cursor:pointer;margin:4px 3px 4px 0}li{margin:10px 0;overflow-wrap:anywhere}.muted{color:#a5b4fc}.pill{color:#86efac}
-</style></head><body><h1>Chrono Phantom Online</h1><p class="muted">Dịch vụ kết bạn và phòng chơi trực tuyến</p><section><h3>Hồ sơ người chơi</h3><p>UID: <b id="uid">Đang tạo…</b></p><input id="name" maxlength="24" placeholder="Tên chiến hữu"><button id="connect">Kết nối / Lưu tên</button><p id="status">Đang kết nối…</p></section><section><h3>Thêm chiến hữu</h3><input id="target" placeholder="UID, ví dụ CP-AB12CD34"><button id="send">Gửi lời mời</button><p id="message"></p><h4>Lời mời đến</h4><ul id="incoming"></ul><h4>Chiến hữu</h4><ul id="friends"></ul></section><section><h3>Phòng chơi</h3><button id="create">Tạo phòng</button><input id="roomId" placeholder="Mã phòng"><button id="join">Vào phòng</button><p id="roomStatus">Chưa ở trong phòng</p><ul id="members"></ul></section><section><h3>Chat phòng</h3><div id="chat" style="height:150px;overflow:auto"></div><input id="chatText" maxlength="500" placeholder="Tin nhắn"><button id="chatSend">Gửi tin</button></section><script src="/socket.io/socket.io.js"></script><script>
-const s=io(),$=id=>document.getElementById(id);let uid=localStorage.getItem("cp_uid");if(!uid){uid="CP-"+Array.from(crypto.getRandomValues(new Uint8Array(4))).map(x=>x.toString(16).padStart(2,"0")).join("").toUpperCase();localStorage.setItem("cp_uid",uid)}$("uid").textContent=uid;$("name").value=localStorage.getItem("cp_name")||"";let myRoom=null;
-function el(tag,text){const n=document.createElement(tag);n.textContent=text;return n}
-function renderRequests(items){$("incoming").replaceChildren();if(!items.length)$("incoming").append(el("li","Chưa có lời mời"));items.forEach(r=>{const li=el("li",r.fromName+" ("+r.fromUid+") ");const a=el("button","Chấp nhận"),d=el("button","Từ chối");a.onclick=()=>s.emit("request:accept",r.fromUid);d.onclick=()=>s.emit("request:decline",r.fromUid);li.append(a,d);$("incoming").append(li)})}
-function renderFriends(items){$("friends").replaceChildren();if(!items.length)$("friends").append(el("li","Chưa có chiến hữu"));items.forEach(f=>$("friends").append(el("li",f.name+" — "+f.uid+" — "+(f.online?"Đang online":"Offline"))))}
-function register(){const name=$("name").value.trim()||"Người chơi";localStorage.setItem("cp_name",name);s.emit("register",{uid,name})}
-$("connect").onclick=register;s.on("connect",()=>{ $("status").textContent="Đã kết nối server";register() });s.on("disconnect",()=>{$("status").textContent="Mất kết nối, đang tự kết nối lại…"});
-s.on("registered",d=>{renderRequests(d.requests||[]);renderFriends(d.friends||[]);$("status").textContent="Đã đăng nhập: "+uid});
-s.on("requests:update",renderRequests);s.on("friends:update",renderFriends);s.on("presence:update",p=>{s.emit("profile:refresh")});
-$("send").onclick=()=>s.emit("request:send",$("target").value.trim().toUpperCase());s.on("request:status",d=>$("message").textContent=d.message);s.on("server:error",m=>$("message").textContent=m);
-$("create").onclick=()=>s.emit("room:create");$("join").onclick=()=>s.emit("room:join",$("roomId").value.trim().toUpperCase());
-s.on("room:created",r=>{myRoom=r.id;$("roomId").value=r.id;$("roomStatus").textContent="Đã tạo phòng "+r.id;renderRoom(r)});
-s.on("room:update",r=>{myRoom=r.id;$("roomStatus").textContent="Đang ở phòng "+r.id;renderRoom(r)});
-s.on("room:left",()=>{myRoom=null;$("roomStatus").textContent="Đã rời phòng";$("members").replaceChildren()});
-function renderRoom(r){$("members").replaceChildren();r.members.forEach(m=>$("members").append(el("li",m.name+" ("+m.uid+")")))}
-$("chatSend").onclick=()=>{const text=$("chatText").value.trim();if(text&&myRoom){s.emit("room:chat",{roomId:myRoom,text});$("chatText").value=""}};
-s.on("room:chat",m=>{const line=el("p","["+m.name+"] "+m.text);$("chat").append(line);$("chat").scrollTop=$("chat").scrollHeight});
-</script></body></html>`));
-
+app.use(express.static(path.join(__dirname, "public")));
 app.get("/health", (_req, res) => res.json({ ok: true, service: "Chrono Phantom Online", uptime: Math.floor(process.uptime()), onlinePlayers: [...socketsByUid.values()].reduce((n, s) => n + (s.size ? 1 : 0), 0), rooms: rooms.size }));
 app.get("/api/status", (_req, res) => res.json({ ok: true, onlinePlayers: [...profiles.keys()].filter(uid => (socketsByUid.get(uid)?.size || 0) > 0).length, rooms: [...rooms.values()].map(roomSummary) }));
 
@@ -87,8 +75,10 @@ io.on("connection", socket => {
     const uid = String(data?.uid || "").toUpperCase();
     if (!uidPattern.test(uid)) return socket.emit("server:error", "UID không hợp lệ.");
     const name = cleanName(data?.name);
+    const title = cleanText(data?.title, 40) || "Tân Binh Thời Không";
+    const avatar = cleanText(data?.avatar, 8) || "⚔️";
     const oldName = profiles.get(uid)?.name;
-    profiles.set(uid, { uid, name, updatedAt: Date.now() });
+    profiles.set(uid, { uid, name, title, avatar, updatedAt: Date.now() });
     socket.data.uid = uid;
     if (!socketsByUid.has(uid)) socketsByUid.set(uid, new Set());
     socketsByUid.get(uid).add(socket.id);
@@ -135,22 +125,45 @@ io.on("connection", socket => {
     emitUid(fromUid, "request:status", { message: "Lời mời kết bạn đã bị từ chối." });
   });
 
-  socket.on("room:create", () => {
+  socket.on("room:create", settings => {
     const uid = uidOf(socket); if (!uid) return socket.emit("server:error", "Hãy kết nối trước.");
     if (!throttle(socket, "room-create", 5)) return socket.emit("server:error", "Bạn tạo phòng quá nhanh.");
+    if (socket.data.roomId) leaveRoom(socket);
     const id = crypto.randomBytes(4).toString("hex").toUpperCase();
-    const room = { id, hostUid: uid, members: new Set([uid]), createdAt: Date.now(), state: null };
+    const stageValue = Number(settings?.stage);
+    const room = {
+      id, hostUid: uid, members: new Set([uid]), invited: new Set(), playerStates: new Map(),
+      name: cleanText(settings?.name, 32) || "Phòng đột kích",
+      privacy: settings?.privacy === "private" ? "private" : "public",
+      stage: [3,5,8,10].includes(stageValue) ? stageValue : 10,
+      difficulty: ["normal","hard","abyss"].includes(settings?.difficulty) ? settings.difficulty : "hard",
+      createdAt: Date.now(), state: null
+    };
     rooms.set(id, room); socket.join("room:" + id); socket.data.roomId = id;
     socket.emit("room:created", roomSummary(room));
+  });
+
+  socket.on("room:invite", targetValue => {
+    const uid = uidOf(socket), room = rooms.get(socket.data.roomId);
+    const targetUid = String(targetValue || "").toUpperCase();
+    if (!uid || !room) return socket.emit("server:error", "Hãy tạo hoặc vào phòng trước.");
+    if (!uidPattern.test(targetUid) || targetUid === uid) return socket.emit("server:error", "UID chiến hữu không hợp lệ.");
+    if (!(friendSets.get(uid) || new Set()).has(targetUid)) return socket.emit("server:error", "Bạn chỉ có thể mời người trong danh sách chiến hữu.");
+    if (room.members.size >= 4) return socket.emit("server:error", "Phòng đã đủ 4 người.");
+    room.invited.add(targetUid);
+    emitUid(targetUid, "room:invite", { room: roomSummary(room), fromUid: uid, fromName: profiles.get(uid)?.name || "Chiến hữu" });
+    socket.emit("room:invite:status", { message: (socketsByUid.get(targetUid)?.size || 0) ? "Đã gửi lời mời vào phòng." : "Chiến hữu đang offline; hãy mời khi họ online." });
   });
 
   socket.on("room:join", roomValue => {
     const uid = uidOf(socket), id = String(roomValue || "").toUpperCase(), room = rooms.get(id);
     if (!uid) return socket.emit("server:error", "Hãy kết nối trước.");
     if (!room) return socket.emit("server:error", "Không tìm thấy phòng.");
+    if (room.privacy === "private" && !room.members.has(uid) && !room.invited.has(uid)) return socket.emit("server:error", "Phòng riêng tư cần lời mời từ chủ phòng.");
     if (room.members.size >= 4 && !room.members.has(uid)) return socket.emit("server:error", "Phòng đã đủ 4 người.");
     if (socket.data.roomId && socket.data.roomId !== id) leaveRoom(socket);
-    room.members.add(uid); socket.join("room:" + id); socket.data.roomId = id;
+    room.members.add(uid); room.invited.delete(uid); socket.join("room:" + id); socket.data.roomId = id;
+    socket.emit("room:update", roomSummary(room));
     io.to("room:" + id).emit("room:update", roomSummary(room));
   });
 
@@ -169,12 +182,51 @@ io.on("connection", socket => {
   }
   socket.on("room:leave", () => leaveRoom(socket));
 
+  socket.on("room:start", () => {
+    const uid = uidOf(socket), room = rooms.get(socket.data.roomId);
+    if (!uid || !room) return socket.emit("server:error", "Hãy vào phòng trước.");
+    if (room.hostUid !== uid) return socket.emit("server:error", "Chỉ chủ phòng mới có thể bắt đầu.");
+    io.to("room:" + room.id).emit("room:game:start", { roomId: room.id, stage: room.stage, difficulty: room.difficulty, startedAt: Date.now() });
+  });
+
+  socket.on("friend:remove", targetValue => {
+    const uid = uidOf(socket), targetUid = String(targetValue || "").toUpperCase();
+    if (!uid || !uidPattern.test(targetUid)) return;
+    friendSets.get(uid)?.delete(targetUid);
+    friendSets.get(targetUid)?.delete(uid);
+    emitUid(uid, "friends:update", friendsOf(uid));
+    emitUid(targetUid, "friends:update", friendsOf(targetUid));
+  });
+
   socket.on("room:chat", data => {
     const uid = uidOf(socket), id = socket.data.roomId, room = rooms.get(id);
     if (!uid || !room || data?.roomId !== id) return;
     if (!throttle(socket, "chat", 8)) return socket.emit("server:error", "Bạn chat quá nhanh.");
     const text = cleanText(data.text, 500); if (!text) return;
     io.to("room:" + id).emit("room:chat", { uid, name: profiles.get(uid)?.name || "Người chơi", text, at: Date.now() });
+  });
+
+  // Relay bounded player movement/animation snapshots to other party members.
+  socket.on("player:state", data => {
+    const uid = uidOf(socket), id = socket.data.roomId, room = rooms.get(id);
+    if (!uid || !room || !room.members.has(uid) || !data || typeof data !== "object") return;
+    if (!throttle(socket, "player-state", 15)) return;
+    const x = Number(data.x), y = Number(data.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const p = {
+      uid, name: profiles.get(uid)?.name || "Người chơi", avatar: profiles.get(uid)?.avatar || "⚔️",
+      x: Math.max(-50, Math.min(2000, x)), y: Math.max(-20, Math.min(700, y)),
+      facing: Number(data.facing) < 0 ? -1 : 1,
+      state: ["IDLE","RUN","ATTACK","PARRY"].includes(data.state) ? data.state : "IDLE",
+      animTimer: Math.max(0, Math.min(10000, Number(data.animTimer) || 0)),
+      animFrame: Math.max(0, Math.min(100, Number(data.animFrame) || 0)),
+      attackStep: Math.max(0, Math.min(20, Number(data.attackStep) || 0)),
+      hp: Math.max(0, Math.min(10000000, Number(data.hp) || 0)),
+      maxHp: Math.max(1, Math.min(10000000, Number(data.maxHp) || 1)),
+      selectedCharacter: cleanText(data.selectedCharacter, 40), at: Date.now()
+    };
+    room.playerStates.set(uid, p);
+    socket.to("room:" + id).emit("player:state", p);
   });
 
   // Authoritative relay for game clients. Do not trust clients to decide rewards or permanent stats.
