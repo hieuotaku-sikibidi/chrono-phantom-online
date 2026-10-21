@@ -616,6 +616,9 @@
           <span>💫</span>
           <span>GACHA 50/50</span>
         </button>
+        <button id="tabBtnEvents" onclick="switchHubTab('events')" class="flex-1 py-2.5 px-2 text-center text-amber-300 hover:text-yellow-100 transition flex items-center justify-center space-x-1 whitespace-nowrap">
+          <span>🌌</span><span>SỰ KIỆN</span>
+        </button>
         <button id="tabBtnCode" onclick="switchHubTab('code')" class="flex-1 py-2.5 px-2 text-center text-amber-300 hover:text-amber-200 transition flex items-center justify-center space-x-1 whitespace-nowrap">
           <span>🎁</span><span>GIFTCODE</span>
         </button>
@@ -993,6 +996,46 @@
           </button>
         </div>
 
+      </div>
+
+
+      <!-- TAB SỰ KIỆN + THẾ GIỚI II -->
+      <div id="tabContentEvents" class="hidden flex-1 p-3 sm:p-4 overflow-y-auto">
+        <div class="event-command-hero">
+          <div class="event-hero-orb"></div>
+          <div class="event-hero-content">
+            <span class="event-eyebrow">CHRONO PHANTOM • LIVE OPERATIONS</span>
+            <h2>SỰ KIỆN THỜI KHÔNG</h2>
+            <p>Hoàn thành các cột mốc chiến đấu để nhận kim cương và mở cánh cổng đến thế giới của những kẻ xưng thần.</p>
+          </div>
+          <div class="event-hero-emblem">✦</div>
+        </div>
+        <div class="event-reward-grid">
+          <article class="event-reward-card" id="eventRewardStage5">
+            <div class="event-reward-icon">💎</div>
+            <div><span class="event-card-kicker">CỘT MỐC I • MÀN 5</span><h3>Huyết Nguyệt Khải Hoàn</h3><p>Đánh bại boss màn 5 để nhận thêm</p><strong>+3.000 KIM CƯƠNG</strong></div>
+            <span class="event-status" id="eventStatus5">CHƯA HOÀN THÀNH</span>
+          </article>
+          <article class="event-reward-card" id="eventRewardStage10">
+            <div class="event-reward-icon">👑</div>
+            <div><span class="event-card-kicker">CỘT MỐC II • MÀN 10</span><h3>Chinh Phục Điện Thờ Tối Thượng</h3><p>Đánh bại đại boss màn 10 để nhận thêm</p><strong>+6.000 KIM CƯƠNG</strong></div>
+            <span class="event-status" id="eventStatus10">CHƯA HOÀN THÀNH</span>
+          </article>
+        </div>
+        <section class="event-special-mission">
+          <div class="event-special-icon">🌀</div>
+          <div class="event-special-copy">
+            <span class="event-card-kicker">NHIỆM VỤ ĐẶC BIỆT • TUYẾN TRUYỆN ẨN</span>
+            <h3>CỔNG KHÔNG GIAN: NHỮNG KẺ XƯNG THẦN</h3>
+            <p>Thắng màn 10 để mở cổng không gian. Bước qua cổng sẽ đưa bạn đến Thế giới II — nơi các vị thần cai trị bằng quyền năng tuyệt đối, với 20 màn hỗn hợp quái vật và boss.</p>
+            <div id="worldTwoUnlockText" class="event-unlock-status">🔒 Cổng không gian đang bị phong ấn — hãy hoàn thành màn 10.</div>
+            <button id="worldTwoPortalButton" onclick="enterWorldTwoFromEvents()" class="event-portal-button" disabled>🌀 CỔNG ĐANG PHONG ẤN</button>
+          </div>
+        </section>
+        <section class="world-two-section">
+          <div class="world-two-title-row"><div><span class="event-card-kicker">CAMPAIGN II • 20 MÀN</span><h3>THẾ GIỚI II: NHỮNG KẺ XƯNG THẦN</h3><p id="worldTwoProgressText">Mở khóa sau khi chiến thắng màn 10.</p></div><span class="world-two-mark">神</span></div>
+          <div id="worldTwoStageGrid" class="world-two-stage-grid"></div>
+        </section>
       </div>
 
       <!-- TAB 4: NHẬP MÃ GIFTCODE -->
@@ -6616,5 +6659,6 @@ function setupTouchButton(id, onDown, onUp = null) {
   </script>
 
   <script src="/ascension-update.js"></script>
+  <script src="/event-world2.js"></script>
 </body>
 </html>
