@@ -1502,7 +1502,7 @@
       char_a: 'Quan tài phong ấn • cọc bóng tối theo hàng • khóa chân kẻ địch.',
       char_b: 'Dạ bộ cực nhanh • ba ám khí liên tiếp • áp sát và kết liễu.',
       char_c: 'Lốc kiếm hai phía • kiếm khí tốc độ cao • chuỗi chém cân bằng.',
-      char_d: 'Lướt chém cơ bản • kiếm khí thẳng • tuyệt kỹ tập trung lực.', char_shadow:'Shadow Step • Black Knight • Atomic: ATK +50%, tốc đánh +10% trong 10 giây.'
+      char_d: 'Lướt chém cơ bản • kiếm khí thẳng • tuyệt kỹ tập trung lực.', char_shadow:'Shadow Step • Black Knight • I AM ATOMIC; Thần khí Hắc Nguyệt mở chuỗi 5 vụ nổ Atomic theo % máu tối đa boss.'
     };
 
     const GEAR_DATABASE = [
@@ -1553,6 +1553,7 @@
       },
       { id: 'w_sss_4', name: 'Súng Ma Năng Huyết Nguyệt', type: 'weapon', rank: 'SSS', baseAtk: 520, icon: '🔫', desc: 'Hỏa pháo SSS ngưng tụ năng lượng tinh vân đỏ thẫm.' },
       { id: 'w_sss_5', name: 'Thái Đao Ảnh Nguyệt Vô Song', type: 'weapon', rank: 'SSS', baseAtk: 550, icon: '🗡️', desc: 'Thái đao SSS chém rách kết giới không gian.' },
+      { id: 'w_shadow_atomic', name: 'Thần Khí Hắc Nguyệt — Atomic Dominion', type: 'weapon', rank: 'SSS', baseAtk: 820, icon: '☢️', desc: 'Thần khí độc hữu của Shadow. Kích hoạt T để liên tiếp gọi xuống 5 vụ nổ Atomic; mỗi vụ gây sát thương bằng 8% máu tối đa của boss.' },
       { id: 'w_ssr_1', name: 'Song Kiếm Zaphkiel', type: 'weapon', rank: 'SSR', baseAtk: 190, icon: '🗡️', desc: 'Thần khí song đao đồng hồ của Kurumi.' },
       { id: 'w_ssr_2', name: 'Huyết Kiếm Khải Huyền', type: 'weapon', rank: 'SSR', baseAtk: 180, icon: '🗡️', desc: 'Thanh kiếm khát máu từ cổ đại.' },
       { id: 'w_ss_1',  name: 'Đại Đao Huyết Nguyệt', type: 'weapon', rank: 'SS', baseAtk: 135, icon: '⚔️', desc: 'Lưỡi đao tôi luyện trong biển máu.' },
@@ -1633,6 +1634,7 @@
       w_sss_3: { name:'Tử Thần Thu Hồn', mode:'soul', duration:7, cd:25, atkBoost:1.8, invincible:true, icon:'☠️', color:'#7dd3fc', desc:'Lưỡi liềm quét rộng, hút máu theo sát thương.' },
       w_sss_4: { name:'Pháo Tinh Vân 0-K', mode:'cannon', duration:5, cd:20, atkBoost:1.65, invincible:false, icon:'💥', color:'#fb923c', desc:'Nạp pháo rồi giáng xuống loạt hỏa lực ma năng.' },
       w_sss_5: { name:'Ảnh Nguyệt Tam Đoạn', mode:'shadow', duration:5, cd:18, atkBoost:1.7, invincible:true, icon:'🌑', color:'#e879f9', desc:'Ba lần dịch chuyển chém xuyên tuyến.' },
+      w_shadow_atomic: { name:'ATOMIC DOMINION — NGŨ TRỌNG BÙNG NỔ', mode:'shadow_atomic', duration:3.1, cd:34, atkBoost:1.6, invincible:true, icon:'☢️', color:'#c084fc', desc:'5 vụ nổ Atomic liên tiếp; mỗi lần gây 8% máu tối đa boss.' },
       w_ssr_1: { name:'Song Luân Phân Thân', mode:'twin', duration:5, cd:17, atkBoost:1.5, invincible:true, icon:'⚔️', color:'#fcd34d', desc:'Hai vòng kiếm xoắn ốc quét trước mặt.' },
       w_ssr_2: { name:'Khải Huyết Khai Hoa', mode:'bleed', duration:6, cd:19, atkBoost:1.55, invincible:false, icon:'🌹', color:'#f43f5e', desc:'Vết chém huyết hoa gây chảy máu kéo dài.' },
       w_ss_1: { name:'Huyết Nguyệt Phá Sơn', mode:'cleave', duration:5, cd:18, atkBoost:1.45, invincible:false, icon:'🪓', color:'#fb7185', desc:'Một nhát đại đao nặng, làm choáng phía trước.' },
