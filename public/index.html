@@ -5274,11 +5274,12 @@
         burstCutscene={active:true,timer:2.7,maxTimer:2.7,title:'I AM ATOMIC',sub:'SHADOW • DOMINION OF THE ECLIPSE',color:'#a855f7',charId:char.id};
         player.isInvincible=true; player.invincibleTimer=2.7; player.atk=Math.round(baseAtk*1.5);
         if(typeof baseSpeed==='number') player.attackSpeed=baseSpeed*1.1;
-        spawnMagicCircle(V_WIDTH/2,GROUND_Y,330,'#a855f7',3.2,true);
-        spawnMagicCircle(V_WIDTH/2,GROUND_Y,220,'#e9d5ff',2.6,true);
-        spawnLightPillar(V_WIDTH/2,GROUND_Y,260,'#7e22ce',2.4);
-        for(let i=0;i<18;i++){const a=i*Math.PI/9;spawnMagicCircle(V_WIDTH/2+Math.cos(a)*150,GROUND_Y-40-Math.sin(a)*45,30,i%2?'#d8b4fe':'#7e22ce',1.1,false);}
-        screenShake=32;screenFlash=.9;sfxUltimateBoom();showToast('I AM ATOMIC — ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY','☄️');
+        const qRingRadius=Math.min(V_WIDTH*.44,V_HEIGHT*.78);
+        spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius, '#a855f7',2.1,true);
+        spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius*.68, '#e9d5ff',1.7,true);
+        spawnLightPillar(V_WIDTH/2,GROUND_Y,Math.min(V_HEIGHT*.74,200),'#7e22ce',1.7);
+        for(let i=0;i<18;i++){const a=i*Math.PI/9;spawnMagicCircle(V_WIDTH/2+Math.cos(a)*V_WIDTH*.31,GROUND_Y-30-Math.sin(a)*Math.min(32,V_HEIGHT*.12),Math.min(26,V_WIDTH*.055),30,i%2?'#d8b4fe':'#7e22ce',.8,false);}
+        screenShake=0;screenFlash=.14;sfxUltimateBoom();showToast('I AM ATOMIC — ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY','☄️');
         if(window.__shadowAtomicTimer)clearTimeout(window.__shadowAtomicTimer);
         window.__shadowAtomicTimer=setTimeout(()=>{player.atk=baseAtk;if(typeof baseSpeed==='number')player.attackSpeed=baseSpeed;applyPlayerStatsToCombat();showToast('Lãnh địa Atomic đã tan biến.','🌌');},10000);
         return;
@@ -6094,16 +6095,16 @@
       broadcastOnlinePlayerState(timestamp);
 
       ctx.save();
-      // Keep all ultimate cut-ins pinned to the viewport. Randomly translating the whole
-      // canvas every frame makes Shadow's Atomic cinematic jump and exposes empty edges.
-      const pinUltimateCamera = !!(burstCutscene && burstCutscene.active);
-      if (screenShake > 0) {
-        if (!pinUltimateCamera) {
-          const shakeX = (Math.random() - 0.5) * screenShake;
-          const shakeY = (Math.random() - 0.5) * screenShake;
-          ctx.translate(shakeX, shakeY);
-        }
-        // Drain shake while the cut-in is pinned so it won't suddenly jolt when it ends.
+      // Pin the viewport for the whole Q animation, even if another callback briefly
+      // clears burstCutscene.active. Q camera shake is discarded, not replayed afterward.
+      const qLockUntil = Number(window.__cpShadowQCameraLockUntil) || 0;
+      const pinUltimateCamera = !!(burstCutscene && burstCutscene.active) || performance.now() < qLockUntil;
+      if (pinUltimateCamera) {
+        screenShake = 0;
+      } else if (screenShake > 0) {
+        const shakeX = (Math.random() - 0.5) * screenShake;
+        const shakeY = (Math.random() - 0.5) * screenShake;
+        ctx.translate(shakeX, shakeY);
         screenShake = Math.max(0, screenShake - dt * 25);
       }
 
@@ -6740,7 +6741,7 @@ function setupTouchButton(id, onDown, onUp = null) {
   <script src="/ascension-update.js"></script>
   <script src="/event-world2.js"></script>
   <script src="/boss-audio-overhaul.js"></script>
-  <script src="/shadow-special.js"></script>
-  <script src="/shadow-ascension-vfx.js"></script>
+  <script src="/shadow-special.js?v=atomic-fit-20261021"></script>
+  <script src="/shadow-ascension-vfx.js?v=atomic-fit-20261021"></script>
 </body>
 </html>
