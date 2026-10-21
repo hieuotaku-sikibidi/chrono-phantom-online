@@ -477,7 +477,13 @@
     if (typeof window.drawParallaxBackground === 'function' && !window.__cpShadowBgWrapped) {
       window.__cpShadowBgWrapped = true;
       var oldBg = window.drawParallaxBackground;
-      window.drawParallaxBackground = function (c) { oldBg.apply(this, arguments); drawAtomicDomain(c); };
+      window.drawParallaxBackground = function (c) {
+        oldBg.apply(this, arguments);
+        // Ascension VFX draws the current domain from window.__cpShadowDomain.
+        // Suppress this older renderer when that layer is active so two independent seals
+        // cannot stack with different centers/radii and look misaligned.
+        if (!window.__cpShadowAscensionVfxLoaded) drawAtomicDomain(c);
+      };
     }
 
     if (typeof window.drawBurstCutscene === 'function' && !window.__cpShadowCutsceneWrapped) {
