@@ -298,11 +298,11 @@
     c.fillStyle = glow; c.fillRect(0, 0, w, ground);
     c.globalAlpha = (.35 + pulse * .26) * fade;
     c.strokeStyle = '#c084fc'; c.lineWidth = 1.5;
-    c.beginPath(); c.ellipse(cx, ground, w * (.33 + .23 * pulse), 17 + pulse * 7, 0, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.ellipse(cx, ground, Math.min(w*.46,w*(.33+.23*pulse)), 17 + pulse * 7, 0, 0, Math.PI * 2); c.stroke();
     c.strokeStyle = '#7c3aed'; c.lineWidth = 2;
-    c.beginPath(); c.ellipse(cx, ground, w * .61, 27 + pulse * 5, 0, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.ellipse(cx, ground, Math.min(w*.46,w*.61), 27 + pulse * 5, 0, 0, Math.PI * 2); c.stroke();
     c.setLineDash([9, 6]); c.lineWidth = .9; c.strokeStyle = '#e9d5ff';
-    c.beginPath(); c.ellipse(cx, ground - 58, w * .49, 105, 0, Math.PI, Math.PI * 2); c.stroke(); c.setLineDash([]);
+    c.beginPath(); c.ellipse(cx, ground - 58, Math.min(w*.46,w*.49), 105, 0, Math.PI, Math.PI * 2); c.stroke(); c.setLineDash([]);
     /* Collapsing purple skyline cracks and dust. */
     for (var i = 0; i < 15; i++) {
       var x = (i * 41 + 11) % w;
@@ -362,14 +362,15 @@
     drawRuinedSkyline(c, p, true);
     c.globalCompositeOperation = 'lighter';
     if (p > .25) {
-      var radius = 8 + impact * (w * .82);
+      var radius = 8 + impact * Math.min(w*.46,h*.78);
       for (var k = 0; k < 3; k++) {
         c.globalAlpha = Math.max(0, (.85 - k * .22) * (1 - aftermath * .35));
         c.strokeStyle = k === 1 ? '#ffffff' : (k === 2 ? '#7c3aed' : '#e9d5ff');
         c.lineWidth = k === 0 ? 4 : 1.7;
         c.beginPath(); c.ellipse(cx, ground, radius * (1 - k * .12), 12 + k * 9, 0, 0, Math.PI * 2); c.stroke();
       }
-      var blastR = 20 + impact * Math.max(w, h) * .64;
+      var cutY = ground - 59;
+      var blastR = 20 + impact * Math.max(0, Math.hypot(w/2,Math.max(cutY,h-cutY))-20);
       var blast = c.createRadialGradient(cx,cy,2,cx,cy,blastR);
       blast.addColorStop(0, 'rgba(255,255,255,' + (0.9 * (1-aftermath*.92)) + ')');
       blast.addColorStop(.12, 'rgba(233,213,255,' + (.8 * (1-aftermath*.9)) + ')');
@@ -524,12 +525,13 @@
         DOMAIN.baseSpeed = DOMAIN.hadSpeed ? player.attackSpeed : 1;
         burstCutscene = { active:true, timer:2.75, maxTimer:2.75, title:'I AM ATOMIC', sub:'SHADOW • SSS+ ĐẶC BIỆT • ATOMIC DOMINION', color:'#a855f7', charId:'char_shadow' };
         player.isInvincible = true; player.invincibleTimer = 2.75;
-        screenShake = 30; screenFlash = .68;
+        screenShake = 0; screenFlash = .14;
         try { if (typeof sfxUltimateBoom === 'function') sfxUltimateBoom(); } catch (_) {}
         try { if (typeof sfxBossSkill === 'function') sfxBossSkill(30); } catch (_) {}
-        spawnMagicCircle(V_WIDTH / 2, GROUND_Y, 345, '#a855f7', 3.4, true);
-        spawnMagicCircle(V_WIDTH / 2, GROUND_Y, 238, '#f5d0fe', 2.7, true);
-        spawnLightPillar(V_WIDTH / 2, GROUND_Y, 260, '#7e22ce', 2.5);
+        var qRingRadius=Math.min(V_WIDTH*.44,V_HEIGHT*.78);
+        spawnMagicCircle(V_WIDTH / 2, GROUND_Y, qRingRadius, '#a855f7', 2.1, true);
+        spawnMagicCircle(V_WIDTH / 2, GROUND_Y, qRingRadius*.68, '#f5d0fe', 1.7, true);
+        spawnLightPillar(V_WIDTH / 2, GROUND_Y, Math.min(V_HEIGHT*.74,200), '#7e22ce', 1.7);
         for (var r = 0; r < 24; r++) {
           var a = Math.PI * 2 * r / 24;
           spawnDimensionCrack(V_WIDTH/2 + Math.cos(a)*80, GROUND_Y + Math.sin(a)*18, V_WIDTH/2 + Math.cos(a)*220, GROUND_Y + Math.sin(a)*28, r%2?'#c084fc':'#f5d0fe', 3.2, 1.05);
@@ -548,8 +550,8 @@
           spawnLightPillar(boss.x, GROUND_Y, 170, '#a855f7', 1.55);
           spawnMagicCircle(boss.x, GROUND_Y, 190, '#7e22ce', 1.45, true);
         }
-        spawnParticles(V_WIDTH/2, GROUND_Y-65, 110, '#a855f7', 3.4);
-        spawnParticles(V_WIDTH/2, GROUND_Y-65, 56, '#f5d0fe', 2.3);
+        spawnParticles(V_WIDTH/2, GROUND_Y-65, 72, '#a855f7', 1.8);
+        spawnParticles(V_WIDTH/2, GROUND_Y-65, 38, '#f5d0fe', 1.05);
         showToast('☢ I AM ATOMIC — VỤ NỔ NGUYÊN TỬ!', '影');
         if (DOMAIN.timerId) clearTimeout(DOMAIN.timerId);
         DOMAIN.timerId = setTimeout(function () {
