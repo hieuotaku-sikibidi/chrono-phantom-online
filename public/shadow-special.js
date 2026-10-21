@@ -56,98 +56,169 @@
   }
 
   function paintShadowBack(c, p) {
-    var t = (typeof gameTime === 'number' ? gameTime : 0);
-    var sway = Math.sin(t * 5.8 + (p.animTimer || 0)) * 4 + (Math.abs(p.vx || 0) > 10 ? -6 : 0);
-    c.save();
-    c.translate(p.x, p.y);
+    var t = typeof gameTime === 'number' ? gameTime : 0;
+    var moving = Math.abs(p.vx || 0) > 10;
+    var sway = Math.sin(t * 4.8 + (p.animTimer || 0)) * 4.8 + (moving ? -5 : 0);
+    c.save(); c.translate(p.x, p.y);
     if (p.facing === -1) c.scale(-1, 1);
-    c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.28 + 0.12 * Math.sin(t * 4);
-    c.strokeStyle = '#9333ea'; c.lineWidth = 1.1; c.shadowColor = '#a855f7'; c.shadowBlur = 13;
-    c.beginPath(); c.ellipse(0, -27, 23 + Math.sin(t * 2) * 2, 30, t * .22, 0, Math.PI * 2); c.stroke();
-    c.globalCompositeOperation = 'source-over';
-    var cape = c.createLinearGradient(-15, -34, 8, 0);
-    cape.addColorStop(0, '#111020'); cape.addColorStop(.52, '#080812'); cape.addColorStop(1, '#26104a');
-    c.fillStyle = cape; c.strokeStyle = '#7e22ce'; c.lineWidth = 1.15;
-    c.beginPath();
-    c.moveTo(-7, -28); c.quadraticCurveTo(-19 + sway, -19, -19 + sway * .6, -3);
-    c.lineTo(-12 + sway * .35, -7); c.lineTo(-7, -2); c.lineTo(-2, -8);
-    c.lineTo(4, -1); c.lineTo(10, -7); c.lineTo(13, -3);
-    c.quadraticCurveTo(12 + sway * .3, -18, 7, -28); c.closePath(); c.fill(); c.stroke();
-    c.globalCompositeOperation = 'lighter';
-    for (var i = 0; i < 5; i++) {
-      var a = t * (i % 2 ? -1 : 1) * (.7 + i * .08) + i * Math.PI * 2 / 5;
-      var x = Math.cos(a) * (17 + (i % 2) * 5);
-      var y = -28 + Math.sin(a) * 16;
-      c.globalAlpha = .34 + .32 * ((Math.sin(t * 5 + i) + 1) / 2);
-      c.fillStyle = i % 2 ? '#e9d5ff' : '#a855f7';
-      c.beginPath(); c.moveTo(x, y - 2.8); c.lineTo(x + 2.3, y); c.lineTo(x, y + 2.8); c.lineTo(x - 2.3, y); c.closePath(); c.fill();
-    }
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = .22 + .08 * Math.sin(t * 3.5);
+    c.strokeStyle = '#9333ea'; c.lineWidth = 1.1; c.shadowColor = '#a855f7'; c.shadowBlur = 15;
+    c.beginPath(); c.ellipse(0, -29, 25 + Math.sin(t * 2) * 2, 31, t * .18, 0, Math.PI * 2); c.stroke();
     c.restore();
+    var cape = c.createLinearGradient(-24, -40, 17, 3);
+    cape.addColorStop(0, '#242038'); cape.addColorStop(.33, '#0d0b19'); cape.addColorStop(.7, '#080711'); cape.addColorStop(1, '#321052');
+    c.fillStyle = cape; c.strokeStyle = '#7e22ce'; c.lineWidth = 1.25;
+    c.beginPath(); c.moveTo(-7, -31); c.lineTo(6, -31);
+    c.quadraticCurveTo(17, -23, 20 + sway, -13); c.lineTo(17 + sway, -4);
+    c.lineTo(10 + sway * .7, -9); c.lineTo(5, -1); c.lineTo(0, -8); c.lineTo(-5, 1);
+    c.lineTo(-11, -7); c.lineTo(-18 + sway * .65, -2);
+    c.quadraticCurveTo(-24 + sway, -20, -7, -31); c.closePath(); c.fill(); c.stroke();
+    var tailGrad = c.createLinearGradient(-17, -18, 20, 5);
+    tailGrad.addColorStop(0, '#100b1c'); tailGrad.addColorStop(.65, '#201035'); tailGrad.addColorStop(1, '#6d28d9');
+    c.fillStyle = tailGrad; c.strokeStyle = '#a855f7'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-14, -13); c.quadraticCurveTo(-25 + sway, -2, -21 + sway, 8);
+    c.lineTo(-14 + sway * .45, 2); c.lineTo(-10, 8); c.lineTo(-9, -7); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(9, -13); c.quadraticCurveTo(22 + sway, -2, 18 + sway, 8);
+    c.lineTo(11 + sway, 3); c.lineTo(7, 7); c.lineTo(6, -7); c.closePath(); c.fill(); c.stroke();
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < 7; i++) {
+      var a = t * (i % 2 ? -1 : 1) * (.55 + i * .065) + i * Math.PI * 2 / 7;
+      var rx = Math.cos(a) * (19 + (i % 3) * 3), ry = -29 + Math.sin(a) * 17;
+      c.globalAlpha = .28 + .38 * (.5 + .5 * Math.sin(t * 5 + i));
+      c.fillStyle = i % 3 === 0 ? '#67e8f9' : (i % 2 ? '#e9d5ff' : '#a855f7');
+      c.shadowColor = c.fillStyle; c.shadowBlur = 7;
+      c.beginPath(); c.moveTo(rx, ry - 3.5); c.lineTo(rx + 2.7, ry);
+      c.lineTo(rx, ry + 3.5); c.lineTo(rx - 2.7, ry); c.closePath(); c.fill();
+    }
+    c.restore(); c.restore();
   }
 
   function paintShadowFront(c, p) {
-    var t = (typeof gameTime === 'number' ? gameTime : 0);
-    var moving = Math.abs(p.vx || 0) > 10;
-    var atk = p.state === 'ATTACK';
-    var sway = Math.sin(t * 7) * 1.5 + (moving ? -2 : 0);
-    c.save();
-    c.translate(p.x, p.y);
+    var t = typeof gameTime === 'number' ? gameTime : 0;
+    var moving = Math.abs(p.vx || 0) > 10, attacking = p.state === 'ATTACK';
+    var bob = Math.sin((p.animTimer || 0) * 5) * 1.1;
+    var sway = Math.sin(t * 6.5) * 1.6 + (moving ? -1.8 : 0);
+    c.save(); c.translate(p.x, p.y);
     if (p.facing === -1) c.scale(-1, 1);
-    c.globalCompositeOperation = 'source-over';
 
-    /* Tailored obsidian coat, high collar and silver-violet seams. */
-    c.shadowColor = '#7e22ce'; c.shadowBlur = 7;
-    var coat = c.createLinearGradient(-12, -29, 13, -5);
-    coat.addColorStop(0, '#242033'); coat.addColorStop(.55, '#080810'); coat.addColorStop(1, '#160b2a');
-    c.fillStyle = coat; c.strokeStyle = '#6d28d9'; c.lineWidth = 1.1;
-    c.beginPath(); c.moveTo(-7, -27); c.lineTo(7, -27); c.lineTo(10, -17);
-    c.lineTo(14 + sway, -7); c.lineTo(7, -10); c.lineTo(2, -7); c.lineTo(0, -13);
-    c.lineTo(-3, -7); c.lineTo(-8, -10); c.lineTo(-14 - sway, -6); c.lineTo(-10, -18); c.closePath(); c.fill(); c.stroke();
-    c.shadowBlur = 0;
-    c.strokeStyle = '#c4b5fd'; c.lineWidth = .8;
-    c.beginPath(); c.moveTo(-6, -25); c.lineTo(-1, -17); c.lineTo(0, -13);
-    c.moveTo(6, -25); c.lineTo(1, -17); c.stroke();
-    c.fillStyle = '#a855f7'; c.beginPath(); c.moveTo(0, -23); c.lineTo(3, -20); c.lineTo(0, -16); c.lineTo(-3, -20); c.closePath(); c.fill();
-
-    /* Dark mask/hood silhouette and sharp black hair spikes. */
-    c.fillStyle = '#05050c'; c.strokeStyle = '#27213a'; c.lineWidth = .8;
-    c.beginPath(); c.moveTo(-8, -39); c.lineTo(-7, -44); c.lineTo(-2, -42); c.lineTo(1, -46);
-    c.lineTo(4, -42); c.lineTo(9, -44); c.lineTo(8, -35); c.lineTo(6, -30);
-    c.lineTo(-6, -30); c.closePath(); c.fill(); c.stroke();
-    c.fillStyle = 'rgba(4,3,12,.88)';
-    c.beginPath(); c.moveTo(-8, -36); c.lineTo(8, -36); c.lineTo(7, -31); c.lineTo(-7, -31); c.closePath(); c.fill();
-    c.globalCompositeOperation = 'lighter';
-    var eyeGlow = 3.4 + Math.sin(t * 11) * .7;
-    c.shadowColor = '#67e8f9'; c.shadowBlur = 11;
-    c.fillStyle = '#67e8f9';
-    c.beginPath(); c.moveTo(-5.7, -34); c.lineTo(-1.5, -33.2); c.lineTo(-4.1, -32.3); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(1.4, -33.2); c.lineTo(5.7, -34); c.lineTo(4.1, -32.3); c.closePath(); c.fill();
-    c.shadowBlur = 0;
-    c.strokeStyle = '#d8b4fe'; c.lineWidth = .8;
-    c.beginPath(); c.moveTo(-8, -36.5); c.lineTo(-1, -36.5); c.moveTo(1, -36.5); c.lineTo(8, -36.5); c.stroke();
-
-    /* Shadow's rune-lined katana, drawn as a recognizable silhouette. */
-    c.save(); c.translate(8, -19); c.rotate(atk ? -.85 + Math.sin(t * 32) * .15 : -.3);
-    c.shadowColor = '#a855f7'; c.shadowBlur = 12;
-    c.lineCap = 'round';
-    c.strokeStyle = '#201333'; c.lineWidth = 4; c.beginPath(); c.moveTo(-1, 5); c.lineTo(4, -1); c.stroke();
-    c.strokeStyle = '#e9d5ff'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(2, 0); c.lineTo(24, -20); c.stroke();
-    c.strokeStyle = '#a855f7'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(3, 0); c.lineTo(23, -19); c.stroke();
-    c.strokeStyle = '#f5f3ff'; c.lineWidth = .7; c.beginPath(); c.moveTo(5, -3); c.lineTo(20, -17); c.stroke();
+    /* Polished boots and segmented greaves sit above the original leg animation. */
+    c.save();
+    var boot = c.createLinearGradient(-10, -10, 10, 0);
+    boot.addColorStop(0, '#343044'); boot.addColorStop(.46, '#090812'); boot.addColorStop(1, '#211032');
+    c.fillStyle = boot; c.strokeStyle = '#6d28d9'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-10, -10); c.lineTo(-2, -9); c.lineTo(-1, -2);
+    c.lineTo(-5, 0); c.lineTo(-13, 0); c.lineTo(-12, -3); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(2, -9); c.lineTo(10, -10); c.lineTo(12, -3);
+    c.lineTo(14, 0); c.lineTo(4, 0); c.lineTo(1, -3); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = '#c4b5fd'; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(-10, -6); c.lineTo(-3, -5); c.moveTo(3, -5); c.lineTo(10, -6); c.stroke();
     c.restore();
+
+    /* The signature split coat: dark satin panels, silver seams and torn violet edges. */
+    c.save(); c.shadowColor = '#7e22ce'; c.shadowBlur = 7;
+    var coat = c.createLinearGradient(-17, -33, 17, -4);
+    coat.addColorStop(0, '#29253a'); coat.addColorStop(.28, '#11101b'); coat.addColorStop(.64, '#070710'); coat.addColorStop(1, '#27103d');
+    c.fillStyle = coat; c.strokeStyle = '#8b5cf6'; c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(-8, -30); c.lineTo(-3, -32); c.lineTo(4, -32); c.lineTo(9, -29);
+    c.lineTo(12, -21); c.lineTo(17 + sway, -8); c.lineTo(10, -11); c.lineTo(7, -5);
+    c.lineTo(2, -10); c.lineTo(0, -5); c.lineTo(-4, -10); c.lineTo(-8, -5);
+    c.lineTo(-10, -12); c.lineTo(-17 - sway, -7); c.lineTo(-12, -22); c.closePath(); c.fill(); c.stroke();
     c.shadowBlur = 0;
 
-    /* Animated spectral blade ring and attack afterimage. */
+    /* Raised collar and custom pauldrons. */
+    c.fillStyle = '#090811'; c.strokeStyle = '#c4b5fd'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-8, -30); c.lineTo(-5, -37); c.lineTo(-1, -31);
+    c.lineTo(1, -31); c.lineTo(6, -37); c.lineTo(9, -29); c.lineTo(3, -25); c.lineTo(-3, -25); c.closePath(); c.fill(); c.stroke();
+    var armor = c.createLinearGradient(-15, -31, 12, -23);
+    armor.addColorStop(0, '#38334b'); armor.addColorStop(.5, '#14111f'); armor.addColorStop(1, '#090811');
+    c.fillStyle = armor; c.strokeStyle = '#a855f7'; c.lineWidth = .9;
+    c.beginPath(); c.moveTo(-8, -28); c.lineTo(-15, -29); c.lineTo(-18, -24); c.lineTo(-12, -21); c.lineTo(-7, -24); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(8, -28); c.lineTo(15, -30); c.lineTo(18, -24); c.lineTo(12, -21); c.lineTo(7, -24); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = '#67e8f9'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-14, -25); c.lineTo(-9, -24); c.moveTo(9, -24); c.lineTo(14, -25); c.stroke();
+
+    /* Chestplate, crossed seams and astral clasp. */
+    c.fillStyle = '#0a0914'; c.strokeStyle = '#5b3a83'; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(-7, -28); c.lineTo(7, -28); c.lineTo(6, -17); c.lineTo(0, -13); c.lineTo(-6, -17); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = '#d8b4fe'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-5, -26); c.lineTo(3, -17); c.moveTo(5, -26); c.lineTo(-1, -19); c.stroke();
+    c.fillStyle = '#c084fc'; c.shadowColor = '#a855f7'; c.shadowBlur = 9;
+    c.beginPath(); c.moveTo(0, -25); c.lineTo(3.4, -21); c.lineTo(0, -17); c.lineTo(-3.4, -21); c.closePath(); c.fill(); c.shadowBlur = 0;
+
+    /* Waist sash and metal buckle. */
+    c.fillStyle = '#05050c'; c.strokeStyle = '#7e22ce'; c.lineWidth = .8;
+    c.beginPath(); c.moveTo(-8, -15); c.lineTo(8, -15); c.lineTo(10, -11); c.lineTo(0, -9); c.lineTo(-10, -11); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = '#d8b4fe'; c.lineWidth = .65;
+    c.beginPath(); c.moveTo(-7, -13); c.lineTo(7, -13); c.moveTo(-6, -10); c.lineTo(5, -10); c.stroke();
+    c.fillStyle = '#67e8f9'; c.shadowColor = '#67e8f9'; c.shadowBlur = 7;
+    c.beginPath(); c.moveTo(0, -14); c.lineTo(2.5, -12); c.lineTo(0, -10); c.lineTo(-2.5, -12); c.closePath(); c.fill(); c.shadowBlur = 0;
+
+    /* Layered black hair with silver strands. */
+    var hair = c.createLinearGradient(-10, -48, 10, -31);
+    hair.addColorStop(0, '#282438'); hair.addColorStop(.4, '#080811'); hair.addColorStop(1, '#171027');
+    c.fillStyle = hair; c.strokeStyle = '#4c3a68'; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(-9, -38); c.lineTo(-12, -45); c.lineTo(-6, -43); c.lineTo(-3, -50);
+    c.lineTo(0, -45); c.lineTo(5, -49); c.lineTo(7, -43); c.lineTo(12, -45);
+    c.lineTo(9, -37); c.lineTo(7, -31); c.lineTo(-7, -31); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = '#7c6c99'; c.lineWidth = .65;
+    c.beginPath(); c.moveTo(-7, -43); c.lineTo(-3, -39); c.moveTo(5, -43); c.lineTo(2, -39); c.stroke();
+
+    /* Sculpted face and half-mask with animated cyan eyes. */
+    var face = c.createLinearGradient(-7, -40, 8, -30);
+    face.addColorStop(0, '#f1d9ce'); face.addColorStop(.55, '#c6a6a6'); face.addColorStop(1, '#6f526e');
+    c.fillStyle = face; c.strokeStyle = '#392641'; c.lineWidth = .65;
+    c.beginPath(); c.moveTo(-7, -38); c.lineTo(7, -38); c.lineTo(6, -32); c.lineTo(2, -29); c.lineTo(-3, -29); c.lineTo(-7, -33); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#080711'; c.strokeStyle = '#7e22ce'; c.lineWidth = .55;
+    c.beginPath(); c.moveTo(-7, -36); c.lineTo(7, -36); c.lineTo(6, -32); c.lineTo(1, -31); c.lineTo(-6, -32); c.closePath(); c.fill(); c.stroke();
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = .42 + .25 * Math.sin(t * 8);
-    c.strokeStyle = '#a855f7'; c.lineWidth = .9;
-    c.beginPath(); c.arc(0, -25, 16 + Math.sin(t * 3) * 1.5, t * .9, t * .9 + Math.PI * 1.25); c.stroke();
-    if (atk) {
-      c.globalAlpha = .82; c.strokeStyle = '#e9d5ff'; c.lineWidth = 2.8;
-      c.beginPath(); c.arc(10, -23, 27, -1.45 + (p.animFrame || 0) * .4, .45 + (p.animFrame || 0) * .4); c.stroke();
-      c.strokeStyle = '#7c3aed'; c.lineWidth = 5;
-      c.beginPath(); c.arc(10, -23, 25, -1.45 + (p.animFrame || 0) * .4, .45 + (p.animFrame || 0) * .4); c.stroke();
+    c.shadowColor = '#67e8f9'; c.shadowBlur = 10; c.fillStyle = '#e0fbff';
+    c.beginPath(); c.moveTo(-5.5, -34.5); c.lineTo(-1.7, -33.7); c.lineTo(-4.2, -32.8); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(1.7, -33.7); c.lineTo(5.5, -34.5); c.lineTo(4.2, -32.8); c.closePath(); c.fill();
+    c.shadowBlur = 0; c.strokeStyle = '#67e8f9'; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(-8, -36.7); c.lineTo(-1, -36.2); c.moveTo(1, -36.2); c.lineTo(8, -36.7); c.stroke();
+
+    /* Long cheek locks, crest and animated hair glints. */
+    c.strokeStyle = '#a78bfa'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(-8, -39); c.quadraticCurveTo(-12 - sway, -33, -8 - sway, -27);
+    c.moveTo(8, -39); c.quadraticCurveTo(12 + sway, -33, 9 + sway, -28); c.stroke();
+    c.strokeStyle = '#67e8f9'; c.lineWidth = .75;
+    c.beginPath(); c.moveTo(-3, -47); c.lineTo(-1, -43); c.moveTo(5, -46); c.lineTo(4, -43); c.stroke();
+    c.fillStyle = '#c084fc'; c.shadowColor = '#c084fc'; c.shadowBlur = 8;
+    c.beginPath(); c.moveTo(0, -48); c.lineTo(2.3, -44); c.lineTo(0, -41); c.lineTo(-2.3, -44); c.closePath(); c.fill(); c.shadowBlur = 0;
+
+    /* Distinct obsidian katana with a violet-cyan energy core. */
+    c.save(); c.translate(9, -18 + bob); c.rotate(attacking ? -.94 + Math.sin(t * 35) * .18 : -.28);
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = '#05050c'; c.lineWidth = 4.6; c.beginPath(); c.moveTo(-2, 6); c.lineTo(3, 0); c.stroke();
+    c.strokeStyle = '#c4b5fd'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(0, 2); c.lineTo(5, -2); c.stroke();
+    c.strokeStyle = '#7e22ce'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(3, 0); c.lineTo(25, -22); c.stroke();
+    var blade = c.createLinearGradient(3, 0, 26, -23);
+    blade.addColorStop(0, '#2e1065'); blade.addColorStop(.42, '#c084fc'); blade.addColorStop(.73, '#f5f3ff'); blade.addColorStop(1, '#67e8f9');
+    c.fillStyle = blade; c.shadowColor = '#a855f7'; c.shadowBlur = 11;
+    c.beginPath(); c.moveTo(3, -1); c.lineTo(21, -21); c.lineTo(28, -25); c.lineTo(24, -16); c.lineTo(5, 2); c.closePath(); c.fill();
+    c.shadowBlur = 0; c.strokeStyle = '#ffffff'; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(6, -3); c.lineTo(23, -21); c.stroke();
+    c.strokeStyle = '#67e8f9'; c.lineWidth = .8; c.beginPath(); c.moveTo(9, -6); c.lineTo(20, -17); c.stroke();
+    c.restore();
+
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = .38 + .18 * Math.sin(t * 8); c.strokeStyle = '#a855f7'; c.lineWidth = .9;
+    c.beginPath(); c.arc(0, -25 + bob, 18 + Math.sin(t * 3) * 1.4, t * .8, t * .8 + Math.PI * 1.3); c.stroke();
+    for (var k = 0; k < 4; k++) {
+      var a = t * (k % 2 ? -1 : 1) * 1.7 + k * Math.PI / 2;
+      var rx = Math.cos(a) * (20 + k * 1.5), ry = -25 + Math.sin(a) * 13;
+      c.globalAlpha = .38 + .32 * (.5 + .5 * Math.sin(t * 8 + k));
+      c.fillStyle = k % 2 ? '#67e8f9' : '#e9d5ff'; c.shadowColor = c.fillStyle; c.shadowBlur = 7;
+      c.beginPath(); c.arc(rx, ry, k === 0 ? 1.8 : 1.1, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+    if (attacking) {
+      c.globalCompositeOperation = 'lighter'; c.globalAlpha = .75;
+      c.strokeStyle = '#f5d0fe'; c.lineWidth = 2.5; c.shadowColor = '#a855f7'; c.shadowBlur = 10;
+      c.beginPath(); c.arc(10, -22, 28, -1.5 + (p.animFrame || 0) * .35, .5 + (p.animFrame || 0) * .35); c.stroke();
+      c.strokeStyle = '#67e8f9'; c.lineWidth = 1;
+      c.beginPath(); c.arc(10, -22, 32, -1.35 + (p.animFrame || 0) * .35, .28 + (p.animFrame || 0) * .35); c.stroke();
     }
     c.restore();
   }
