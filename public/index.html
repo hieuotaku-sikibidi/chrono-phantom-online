@@ -5278,7 +5278,7 @@
         spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius, '#a855f7',2.1,true);
         spawnMagicCircle(V_WIDTH/2,GROUND_Y,qRingRadius*.68, '#e9d5ff',1.7,true);
         spawnLightPillar(V_WIDTH/2,GROUND_Y,Math.min(V_HEIGHT*.74,200),'#7e22ce',1.7);
-        for(let i=0;i<18;i++){const a=i*Math.PI/9;spawnMagicCircle(V_WIDTH/2+Math.cos(a)*V_WIDTH*.31,GROUND_Y-30-Math.sin(a)*Math.min(32,V_HEIGHT*.12),Math.min(26,V_WIDTH*.055),30,i%2?'#d8b4fe':'#7e22ce',.8,false);}
+        for(let i=0;i<18;i++){const a=i*Math.PI/9;spawnMagicCircle(V_WIDTH/2+Math.cos(a)*V_WIDTH*.31,GROUND_Y-30-Math.sin(a)*Math.min(32,V_HEIGHT*.12),Math.min(26,V_WIDTH*.055),i%2?'#d8b4fe':'#7e22ce',.8,false);}
         screenShake=0;screenFlash=.14;sfxUltimateBoom();showToast('I AM ATOMIC — ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY','☄️');
         if(window.__shadowAtomicTimer)clearTimeout(window.__shadowAtomicTimer);
         window.__shadowAtomicTimer=setTimeout(()=>{player.atk=baseAtk;if(typeof baseSpeed==='number')player.attackSpeed=baseSpeed;applyPlayerStatsToCombat();showToast('Lãnh địa Atomic đã tan biến.','🌌');},10000);
