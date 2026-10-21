@@ -2867,7 +2867,7 @@
     /* =========================================================================
        HỆ THỐNG VẼ MODEL VECTOR ANIME CHI TIẾT CHO CẢ 10 NHÂN VẬT (KHÔNG KHỐI VUÔNG)
        ========================================================================= */
-    function drawPixelKurumi(c, p) {
+    function drawPixelKurumi(c, p, characterId = null, weaponData = null) {
       c.save();
       c.translate(p.x, p.y);
       if (p.facing === -1) c.scale(-1, 1);
@@ -2876,7 +2876,7 @@
         c.globalAlpha = 0.6;
       }
 
-      const char = CHARACTER_DATABASE.find(item => item.id === playerData.selectedCharacter) || CHARACTER_DATABASE[0];
+      const char = CHARACTER_DATABASE.find(item => item.id === (characterId || playerData.selectedCharacter)) || CHARACTER_DATABASE[0];
       const theme = getCharacterVisualTheme(char.id);
       const isMoving = Math.abs(p.vx) > 10;
       const isAttacking = p.state === 'ATTACK';
@@ -2891,7 +2891,7 @@
       c.fill();
 
       // 1. Vòng Hào Quang Thần Khí SSS (Astral Halo sau lưng)
-      const w = getGearItem(playerData.equipped.weapon);
+      const w = getGearItem(weaponData || playerData.equipped.weapon);
       if (w && w.rank === 'SSS') {
         c.save();
         c.translate(0, -26 + breathY);
@@ -6008,11 +6008,11 @@
       drawPixelKurumi(ctx, player);
       if (gameState === 'PLAYING' && onlineRoomId && onlineRemotePlayers.size) {
         onlineRemotePlayers.forEach((remote, uid) => {
-          const remotePlayer = {...player, x:Number(remote.x)||0, y:Number(remote.y)||GROUND_Y, facing:remote.facing||1,
+          const remotePlayer = {...player, x:Number(remote.x)||0, y:Number(remote.y)||GROUND_Y, vx:Number(remote.vx)||0, facing:remote.facing||1,
             state:(remote.actionUntil||0)>Date.now()?'ATTACK':(remote.state||'IDLE'),
             animTimer:Number(remote.animTimer)||0, animFrame:Number(remote.animFrame)||0,
             attackStep:Number(remote.attackStep)||0, isInvincible:false, isParrying:false, isInvincibleTimer:0};
-          ctx.save(); ctx.globalAlpha=0.82; drawPixelKurumi(ctx, remotePlayer); ctx.restore();
+          ctx.save(); ctx.globalAlpha=0.82; drawPixelKurumi(ctx, remotePlayer, remote.selectedCharacter, remote.weapon); ctx.restore();
           ctx.save(); ctx.fillStyle='#67e8f9'; ctx.font='10px monospace'; ctx.textAlign='center';
           ctx.fillText(String(remote.name||uid).slice(0,18), remotePlayer.x, remotePlayer.y-57);
           ctx.restore();
@@ -6466,9 +6466,10 @@
       if (timestamp - lastOnlineStateAt >= 100) {
         lastOnlineStateAt = timestamp;
         onlineSocket.emit('player:state', {
-          x:player.x, y:player.y, facing:player.facing, state:player.state,
+          x:player.x, y:player.y, vx:player.vx, facing:player.facing, state:player.state,
           animTimer:player.animTimer, animFrame:player.animFrame, attackStep:player.attackStep,
-          hp:player.hp, maxHp:player.maxHp, selectedCharacter:playerData.selectedCharacter
+          hp:player.hp, maxHp:player.maxHp, selectedCharacter:playerData.selectedCharacter,
+          weapon:playerData.equipped.weapon
         });
       }
       if (boss && raidRoomState?.hostUid === ensureSocialData().uid && timestamp - lastOnlineBossStateAt >= 250) {
