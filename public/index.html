@@ -1487,9 +1487,11 @@
         skillLabels: { e: 'E: LƯỚT CHÉM', r: 'R: NÉM ĐÁ', q: 'Q: TẬP TRUNG LỰC' },
         desc: 'Kiếm sĩ tân thủ đang rèn luyện căn bản.',
         unlocked: true
-      }
+      },
+      { id:'char_shadow', name:'Shadow — Eminence of Shadow', title:'SSS TỐI THƯỢNG • I AM ATOMIC', rank:'SSS', rankLabel:'SSS TỐI THƯỢNG', isUltimate:true, isShadow:true, avatarIcon:'影', hpMult:3.6, atkMult:4.6, defMult:2.5, critBonus:40, lifesteal:.04, cdrBonus:12, skillLabels:{e:'E: SHADOW STEP',r:'R: BLACK KNIGHT',q:'Q: I AM ATOMIC'}, desc:'Áo choàng đen, tóc đen, mắt xanh lam và kiếm ma lực tím. Atomic mở lãnh địa hủy diệt 10 giây.', unlocked:false, codeLocked:true }
     ];
 
+    CHARACTER_DATABASE.forEach(c => { if (c.rank !== 'D' && !c.codeLocked) c.unlocked = false; });
     const CHARACTER_SKILL_NOTES = {
       char_yuno: 'Huyết Ảnh Xuyên Tâm • Quỷ Nhãn Tuyên Án • Q mở Lãnh Địa Hồng Nguyệt, ATK +25% trong 8 giây.',
       char_sss_ult: 'Dịch chuyển cùng bầy dơi • nhiều đạn tự truy kích • hút máu từ đại chiêu.',
@@ -1500,7 +1502,7 @@
       char_a: 'Quan tài phong ấn • cọc bóng tối theo hàng • khóa chân kẻ địch.',
       char_b: 'Dạ bộ cực nhanh • ba ám khí liên tiếp • áp sát và kết liễu.',
       char_c: 'Lốc kiếm hai phía • kiếm khí tốc độ cao • chuỗi chém cân bằng.',
-      char_d: 'Lướt chém cơ bản • kiếm khí thẳng • tuyệt kỹ tập trung lực.'
+      char_d: 'Lướt chém cơ bản • kiếm khí thẳng • tuyệt kỹ tập trung lực.', char_shadow:'Shadow Step • Black Knight • Atomic: ATK +50%, tốc đánh +10% trong 10 giây.'
     };
 
     const GEAR_DATABASE = [
@@ -1643,30 +1645,24 @@
 
     // Dữ liệu người chơi
     let playerData = {
-      gold: 2500,
-      shards: 800,
+      gold: 0,
+      shards: 0,
       pity90: 0,
       isGuaranteedSSS: false,
       selectedSlot: 'weapon',
-      selectedCharacter: 'char_sss_ult',
+      selectedCharacter: 'char_d',
       currentCategory: 'all',
       currentRankFilter: 'ALL',
 
       equipped: {
-        weapon: { id: 'w_sss_1', level: 1 },
-        armor: { id: 'a_sss_1', level: 1 },
-        headwear: { id: 'h_sss_1', level: 1 },
-        ring: { id: 'r_sss_1', level: 1 },
-        artifact: { id: 'art_sss_1', level: 1 }
+        weapon: { id: 'w_d_1', level: 1 },
+        armor: { id: 'a_d_1', level: 1 },
+        headwear: { id: 'h_d_1', level: 1 },
+        ring: { id: 'r_d_1', level: 1 },
+        artifact: { id: 'art_d_1', level: 1 }
       },
 
-      inventory: [
-        { id: 'w_ssr_1', level: 1 },
-        { id: 'w_s_1', level: 1 },
-        { id: 'a_ss_1', level: 1 },
-        { id: 'h_ss_1', level: 1 },
-        { id: 'r_ss_1', level: 1 }
-      ]
+      inventory: []
     };
 
     function showToast(text, icon = "✨") {
@@ -1758,12 +1754,12 @@
         const rankClass = char.isYuno ? 'rank-SSS-SPEC' : `rank-${char.rank}`;
         card.className = `p-2.5 rounded-xl border-2 ${rankClass} bg-slate-950/80 flex flex-col justify-between cursor-pointer transition ${isSelected ? 'char-card-selected' : 'hover:scale-101 opacity-90'}`;
         card.onclick = () => {
-          if (isLocked) {
-            showToast("Nhập code 'NHANVATGIOIHAN' để mở khóa Yuno!", "🔒");
-            openGiftCodeTab();
-          } else {
-            selectCharacter(char.id);
-          }
+          if (!isLocked) { selectCharacter(char.id); return; }
+          if (char.codeLocked) { openGiftCodeTab(); showToast('Nhân vật đặc biệt cần mã mở khóa riêng.', '🔒'); return; }
+          const price = ({C:1500,B:4000,A:9000,S:18000,SS:35000,SSR:60000,SSS:120000}[char.rank] || 120000);
+          if (!window.confirm('Mua '+char.name+' với '+price.toLocaleString('vi-VN')+' vàng?')) return;
+          if (playerData.gold < price) { showToast('Không đủ vàng. Hãy vượt ải để kiếm thêm!', '🪙'); return; }
+          playerData.gold -= price; char.unlocked = true; char.price = price; updateHubUI(); renderCharacterRoster(); showToast('Đã mua nhân vật: '+char.name, '✨');
         };
 
         card.innerHTML = `
@@ -1792,7 +1788,7 @@
           </div>
 
           <button class="mt-2 w-full py-1 rounded-lg text-[9px] font-black uppercase transition ${isLocked ? 'bg-rose-950 border border-red-500 text-rose-300' : (isSelected ? 'bg-amber-400 text-gray-950 shadow-md' : 'bg-white/10 text-white hover:bg-rose-600')}">
-            ${isLocked ? '🔒 NHẬP CODE MỞ KHÓA' : (isSelected ? '✓ ĐANG XUẤT TRẬN' : 'CHỌN NHÂN VẬT')}
+            ${isLocked ? (char.codeLocked ? '🔒 NHÂN VẬT BÍ MẬT' : '🪙 MUA BẰNG VÀNG') : (isSelected ? '✓ ĐANG XUẤT TRẬN' : 'CHỌN NHÂN VẬT')}
           </button>
         `;
         grid.appendChild(card);
@@ -5231,6 +5227,20 @@
         char_d: { color: '#94a3b8', sub: '#f8fafc', mult: 4.3, stun: 0.55, shake: 14 }
       };
       const profile = ultProfiles[char.id] || ultProfiles.char_d;
+      if (char.id === 'char_shadow') {
+        const baseAtk=player.atk, baseSpeed=player.attackSpeed;
+        burstCutscene={active:true,timer:2.7,maxTimer:2.7,title:'I AM ATOMIC',sub:'SHADOW • DOMINION OF THE ECLIPSE',color:'#a855f7',charId:char.id};
+        player.isInvincible=true; player.invincibleTimer=2.7; player.atk=Math.round(baseAtk*1.5);
+        if(typeof baseSpeed==='number') player.attackSpeed=baseSpeed*1.1;
+        spawnMagicCircle(V_WIDTH/2,GROUND_Y,330,'#a855f7',3.2,true);
+        spawnMagicCircle(V_WIDTH/2,GROUND_Y,220,'#e9d5ff',2.6,true);
+        spawnLightPillar(V_WIDTH/2,GROUND_Y,260,'#7e22ce',2.4);
+        for(let i=0;i<18;i++){const a=i*Math.PI/9;spawnMagicCircle(V_WIDTH/2+Math.cos(a)*150,GROUND_Y-40-Math.sin(a)*45,30,i%2?'#d8b4fe':'#7e22ce',1.1,false);}
+        screenShake=32;screenFlash=.9;sfxUltimateBoom();showToast('I AM ATOMIC — ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY','☄️');
+        if(window.__shadowAtomicTimer)clearTimeout(window.__shadowAtomicTimer);
+        window.__shadowAtomicTimer=setTimeout(()=>{player.atk=baseAtk;if(typeof baseSpeed==='number')player.attackSpeed=baseSpeed;applyPlayerStatsToCombat();showToast('Lãnh địa Atomic đã tan biến.','🌌');},10000);
+        return;
+      }
       const ultColor = profile.color;
       if (char.id === 'char_yuno') {
         yunoDomainState.active = true;
@@ -6545,6 +6555,7 @@
       switchHubTab('code');
     }
 
+    function codeHash(value) { let h=2166136261; for(let i=0;i<value.length;i++) h=Math.imul(h ^ value.charCodeAt(i),16777619)>>>0; return h.toString(16); }
     function redeemGiftCode() {
       initAudio();
       const input = document.getElementById('inputGiftCode');
@@ -6562,6 +6573,9 @@
         sfxUltimateBoom();
         screenShake = 10;
         showToast("MỞ KHÓA THÀNH CÔNG: YUNO SSS ĐẶC BIỆT!", "🔪");
+      } else if (codeHash(code) === '42253dee') {
+        const sh = CHARACTER_DATABASE.find(c => c.id === 'char_shadow');
+        if (sh) { sh.unlocked = true; selectCharacter('char_shadow'); renderCharacterRoster(); showToast('Bóng tối đã đáp lại lời triệu hồi.', '影'); }
       } else if (code === 'VOHAN999') {
         playerData.gold += 999999999;
         playerData.shards += 999999999;
