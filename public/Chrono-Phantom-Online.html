@@ -6840,7 +6840,7 @@ function setupTouchButton(id, onDown, onUp = null) {
 /* Chrono Phantom: Ascension UI + Combat Audio */
 (function(){
 if(window.__cpAscensionLoaded)return;window.__cpAscensionLoaded=true;
-var cssLink=document.createElement('link');cssLink.rel='stylesheet';cssLink.href='/ascension-update.css';document.head.appendChild(cssLink);
+/* Stylesheet is already bundled inline for standalone HTML use. */
 var banner=document.querySelector('#tabContentChars > div');if(banner)banner.classList.add('character-showcase-banner');
 var gacha=document.querySelector('#tabContentGacha .max-w-xl');if(gacha)gacha.classList.add('gacha-feature-banner');
 var prof=document.querySelector('#tabContentProfile .max-w-3xl > div:first-child');if(prof)prof.classList.add('profile-showcase-card');
