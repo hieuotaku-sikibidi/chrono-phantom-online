@@ -4864,6 +4864,8 @@
 
       // Shadow's basic chain gets its own short, viewport-bounded sword choreography.
       if (char.id === 'char_shadow') {
+        // Action token prevents an older R timeout from cancelling a newer normal attack.
+        window.__cpShadowVisualActionToken = (Number(window.__cpShadowVisualActionToken) || 0) + 1;
         window.__cpShadowBasicSwing = {
           characterId:'char_shadow', start:performance.now(), duration:.34,
           x:Math.max(24,Math.min(V_WIDTH-24,slashX)), y:Math.max(28,Math.min(GROUND_Y-10,slashY)),
