@@ -4690,7 +4690,9 @@
     // ĐIỀU PHỐI SÁT THƯƠNG CHUẨN XÁC LÊN BOSS (CHỐNG ÂM MÁU VÀ XỬ LÝ HẠ GỤC)
     function damageBoss(dmg, reactionText = '', isCrit = false, textColor = '#ffffff') {
       if (!boss || !boss.alive) return;
-      boss.hp = Math.max(0, boss.hp - Math.max(0, dmg));
+      const sharedOnlineBoss = Boolean(onlineSocket?.connected && onlineRoomId);
+      const damageAmount = Math.max(0, Math.round(Number(dmg) || 0));
+      if (!sharedOnlineBoss) boss.hp = Math.max(0, boss.hp - damageAmount);
       boss.hitFlash = 0.12;
       if (boss.stunTimer) boss.stunTimer = Math.max(0, boss.stunTimer - 0.04);
       spawnParticles(boss.x, boss.y - 40, isCrit ? 25 : 15, textColor, 1.5);
@@ -4706,6 +4708,11 @@
       if (char.lifesteal && player.hp < player.maxHp) {
         const heal = Math.round(dmg * char.lifesteal);
         player.hp = Math.min(player.maxHp, player.hp + heal);
+      }
+
+      if (sharedOnlineBoss) {
+        onlineSocket.emit('boss:damage', {damage:damageAmount});
+        return;
       }
 
       if (boss.hp <= 0) {
@@ -6137,6 +6144,8 @@
     let raidRoomState = null;
     let onlineRemotePlayers = new Map();
     let lastOnlineStateAt = 0;
+    let lastOnlineBossStateAt = 0;
+    let onlineBossDeathHandledRoom = null;
     function socialStatus(message, good=false) {
       const el = document.getElementById('onlineSocialStatus');
       if (el) { el.textContent = message; el.className = 'text-[10px] ' + (good ? 'text-emerald-300' : 'text-amber-200'); }
@@ -6236,9 +6245,25 @@
       onlineSocket.on('room:game:start', data => {
         if (!data) return;
         onlineRoomId = data.roomId || onlineRoomId;
+        onlineBossDeathHandledRoom = null;
+        lastOnlineBossStateAt = 0;
         document.getElementById('hubModal')?.classList.add('hidden');
         showToast('Tổ đội bắt đầu ải ' + (data.stage || 1) + '!', '🐉');
         startGame(Number(data.stage) || 1);
+        if (boss && raidRoomState?.hostUid === ensureSocialData().uid && onlineSocket?.connected) {
+          onlineSocket.emit('boss:init', {
+            hp:boss.hp, maxHp:boss.maxHp, x:boss.x, y:boss.y, facing:boss.facing,
+            isEnraged:boss.isEnraged, isShootingLaser:boss.isShootingLaser, isJumping:boss.isJumping,
+            attackWarning:boss.attackWarning, attackPattern:boss.attackPattern, animTimer:boss.animTimer,
+            attackTimer:boss.attackTimer, laserTimer:boss.laserTimer, jumpTimer:boss.jumpTimer
+          });
+        }
+      });
+      onlineSocket.on('boss:state', data => applyOnlineBossState(data));
+      onlineSocket.on('game:state', packet => {
+        if (packet?.state?.kind === 'boss' && packet.fromUid === raidRoomState?.hostUid) {
+          applyOnlineBossState({roomId:onlineRoomId, ...packet.state.boss});
+        }
       });
       onlineSocket.on('player:state', data => {
         if (!data || data.uid === ensureSocialData().uid) return;
@@ -6252,10 +6277,42 @@
         onlineRemotePlayers.set(packet.fromUid, {...previous, state:'ATTACK', actionUntil:Date.now()+650, lastAction:action});
       });
     }
+    function applyOnlineBossState(data) {
+      if (!data || !onlineRoomId || (data.roomId && data.roomId !== onlineRoomId) || !boss || gameState !== 'PLAYING') return;
+      const wasAlive = boss.alive;
+      if (Number.isFinite(Number(data.maxHp)) && Number(data.maxHp) > 0) boss.maxHp = Number(data.maxHp);
+      if (Number.isFinite(Number(data.hp))) boss.hp = Math.max(0, Math.min(boss.maxHp, Number(data.hp)));
+      boss.alive = data.alive === undefined ? boss.hp > 0 : !!data.alive && boss.hp > 0;
+      for (const key of ['x','y','facing','animTimer','attackTimer','laserTimer','jumpTimer','attackPattern']) {
+        if (Number.isFinite(Number(data[key]))) boss[key] = Number(data[key]);
+      }
+      for (const key of ['isEnraged','isShootingLaser','isJumping','attackWarning']) {
+        if (typeof data[key] === 'boolean') boss[key] = data[key];
+      }
+      if (!boss.alive && wasAlive && onlineBossDeathHandledRoom !== onlineRoomId) {
+        onlineBossDeathHandledRoom = onlineRoomId;
+        boss.hp = 0; boss.isShootingLaser = false;
+        const deadBossBar = document.getElementById('bossHpBar');
+        const deadBossBuffer = document.getElementById('bossHpBuffer');
+        const deadBossText = document.getElementById('bossHpText');
+        if (deadBossBar) deadBossBar.style.width = '0%';
+        if (deadBossBuffer) deadBossBuffer.style.width = '0%';
+        if (deadBossText) deadBossText.innerText = '0 / ' + boss.maxHp.toLocaleString();
+        spawnLightPillar(boss.x, GROUND_Y, 70, '#fde047', 1.2);
+        spawnMagicCircle(boss.x, GROUND_Y, 90, '#ff0055', 1.5, true);
+        spawnDimensionCrack(boss.x - 55, boss.y - 70, boss.x + 55, boss.y + 10, '#fde047', 4.5);
+        spawnDimensionCrack(boss.x - 55, boss.y + 10, boss.x + 55, boss.y - 70, '#ff0055', 4.5);
+        spawnParticles(boss.x, boss.y - 45, 55, '#fde047', 2.2);
+        sfxUltimateBoom(); screenShake = 16; screenFlash = 0.85;
+        spawnDamageText(boss.x, boss.y - 70, '💀 BOSS BỊ TIÊU DIỆT!', '#fde047', true, 'VICTORY');
+        setTimeout(() => onStageClear(), 750);
+      }
+    }
     function disconnectSocialOnline() {
       if (onlineSocket) { onlineSocket.disconnect(); onlineSocket = null; }
       onlineRoomId = null;
       onlineRemotePlayers.clear();
+      onlineBossDeathHandledRoom = null;
       socialStatus('Đã ngắt kết nối máy chủ online.', false);
       renderRaidRoom();
     }
@@ -6405,13 +6462,24 @@
       onlineSocket.emit('room:start');
     }
     function broadcastOnlinePlayerState(timestamp) {
-      if (!onlineSocket?.connected || !onlineRoomId || gameState !== 'PLAYING' || timestamp - lastOnlineStateAt < 100) return;
-      lastOnlineStateAt = timestamp;
-      onlineSocket.emit('player:state', {
-        x:player.x, y:player.y, facing:player.facing, state:player.state,
-        animTimer:player.animTimer, animFrame:player.animFrame, attackStep:player.attackStep,
-        hp:player.hp, maxHp:player.maxHp, selectedCharacter:playerData.selectedCharacter
-      });
+      if (!onlineSocket?.connected || !onlineRoomId || gameState !== 'PLAYING') return;
+      if (timestamp - lastOnlineStateAt >= 100) {
+        lastOnlineStateAt = timestamp;
+        onlineSocket.emit('player:state', {
+          x:player.x, y:player.y, facing:player.facing, state:player.state,
+          animTimer:player.animTimer, animFrame:player.animFrame, attackStep:player.attackStep,
+          hp:player.hp, maxHp:player.maxHp, selectedCharacter:playerData.selectedCharacter
+        });
+      }
+      if (boss && raidRoomState?.hostUid === ensureSocialData().uid && timestamp - lastOnlineBossStateAt >= 250) {
+        lastOnlineBossStateAt = timestamp;
+        onlineSocket.emit('game:state', {kind:'boss', boss:{
+          hp:boss.hp, maxHp:boss.maxHp, alive:boss.alive, x:boss.x, y:boss.y, facing:boss.facing,
+          isEnraged:boss.isEnraged, isShootingLaser:boss.isShootingLaser, isJumping:boss.isJumping,
+          attackWarning:boss.attackWarning, attackPattern:boss.attackPattern, animTimer:boss.animTimer,
+          attackTimer:boss.attackTimer, laserTimer:boss.laserTimer, jumpTimer:boss.jumpTimer
+        }});
+      }
     }
     function broadcastOnlineAction(action) {
       if (onlineSocket?.connected && onlineRoomId) {
