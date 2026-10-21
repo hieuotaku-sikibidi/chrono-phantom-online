@@ -6094,10 +6094,16 @@
       broadcastOnlinePlayerState(timestamp);
 
       ctx.save();
+      // Keep all ultimate cut-ins pinned to the viewport. Randomly translating the whole
+      // canvas every frame makes Shadow's Atomic cinematic jump and exposes empty edges.
+      const pinUltimateCamera = !!(burstCutscene && burstCutscene.active);
       if (screenShake > 0) {
-        const shakeX = (Math.random() - 0.5) * screenShake;
-        const shakeY = (Math.random() - 0.5) * screenShake;
-        ctx.translate(shakeX, shakeY);
+        if (!pinUltimateCamera) {
+          const shakeX = (Math.random() - 0.5) * screenShake;
+          const shakeY = (Math.random() - 0.5) * screenShake;
+          ctx.translate(shakeX, shakeY);
+        }
+        // Drain shake while the cut-in is pinned so it won't suddenly jolt when it ends.
         screenShake = Math.max(0, screenShake - dt * 25);
       }
 
