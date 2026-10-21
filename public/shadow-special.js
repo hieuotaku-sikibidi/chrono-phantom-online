@@ -487,7 +487,6 @@
           DOMAIN.buffActive = true;
           DOMAIN.buffExpiresAt = DOMAIN.expiresAt;
           if (typeof applyPlayerStatsToCombat === 'function') applyPlayerStatsToCombat();
-          player.atk = Math.round(player.atk * 1.5);
           player.attackSpeed = (DOMAIN.hadSpeed ? DOMAIN.baseSpeed : 1) * 1.1;
           screenShake = Math.max(screenShake, 12);
           showToast('LÃNH ĐỊA ATOMIC • ATK +50% • TỐC ĐÁNH +10% • 10 GIÂY', '☄️');
