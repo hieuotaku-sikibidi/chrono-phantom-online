@@ -264,6 +264,7 @@ io.on("connection", socket => {
     const p = {
       uid, name: profiles.get(uid)?.name || "Người chơi", avatar: profiles.get(uid)?.avatar || "⚔️",
       x: Math.max(-50, Math.min(2000, x)), y: Math.max(-20, Math.min(700, y)),
+      vx: Math.max(-400, Math.min(400, Number(data.vx) || 0)),
       facing: Number(data.facing) < 0 ? -1 : 1,
       state: ["IDLE","RUN","ATTACK","PARRY"].includes(data.state) ? data.state : "IDLE",
       animTimer: Math.max(0, Math.min(10000, Number(data.animTimer) || 0)),
@@ -271,7 +272,12 @@ io.on("connection", socket => {
       attackStep: Math.max(0, Math.min(20, Number(data.attackStep) || 0)),
       hp: Math.max(0, Math.min(10000000, Number(data.hp) || 0)),
       maxHp: Math.max(1, Math.min(10000000, Number(data.maxHp) || 1)),
-      selectedCharacter: cleanText(data.selectedCharacter, 40), at: Date.now()
+      selectedCharacter: cleanText(data.selectedCharacter, 40),
+      weapon: data.weapon && typeof data.weapon === "object" ? {
+        id: cleanText(data.weapon.id, 40),
+        level: Math.max(1, Math.min(100, Number(data.weapon.level) || 1))
+      } : null,
+      at: Date.now()
     };
     room.playerStates.set(uid, p);
     socket.to("room:" + id).emit("player:state", p);
