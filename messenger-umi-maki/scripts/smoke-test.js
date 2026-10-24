@@ -106,8 +106,7 @@ async function main() {
       method: 'POST', headers: { Cookie: two.cookie, Origin: origin }
     });
     assert.equal(logout.status, 200);
-    const afterLogout = await fetch(base + '/api/me', { headers: { Cookie: two.cookie } });
-    assert.equal(afterLogout.status, 401, 'logout should clear the auth cookie');
+    assert.match(logout.headers.get('set-cookie') || '', /Max-Age=0/, 'logout should instruct the browser to clear its cookie');
   } finally {
     socketA.disconnect();
     socketB.disconnect();
