@@ -268,7 +268,6 @@
     }
     if (scrollBottom) area.scrollTop = area.scrollHeight;
   }
-  async function performAction(action, id) {
   function callErrorMessage(error) {
     if (error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) return 'Bạn chưa cấp quyền sử dụng mic/camera. Hãy cho phép quyền trong trình duyệt rồi thử lại.';
     if (error && (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError')) return 'Không tìm thấy mic hoặc camera phù hợp trên thiết bị này.';
