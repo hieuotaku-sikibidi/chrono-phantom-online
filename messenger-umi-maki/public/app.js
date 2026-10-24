@@ -1,8 +1,21 @@
 'use strict';
 (() => {
   const $ = selector => document.querySelector(selector);
-  const state = { me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined };
+  const state = { me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined, theme: localStorage.getItem('umi_theme') === 'dark' ? 'dark' : 'light', call: null };
   let toastTimer = null, searchTimer = null;
+  function applyTheme(theme, save = true) {
+    state.theme = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = state.theme;
+    if (save) {
+      try { localStorage.setItem('umi_theme', state.theme); } catch {}
+    }
+    document.querySelectorAll('[data-theme-choice]').forEach(button => {
+      button.classList.toggle('selected', button.dataset.themeChoice === state.theme);
+      button.setAttribute('aria-pressed', String(button.dataset.themeChoice === state.theme));
+    });
+  }
+  applyTheme(state.theme, false);
+
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -44,6 +57,7 @@
     setNote('#loginNote',''); setNote('#registerNote','');
   }
   function signOut(showLogin = true) {
+    if (state.call) endCall();
     fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     if (state.socket) { state.socket.disconnect(); state.socket = null; }
     state.me = null; state.friends = []; state.incoming = []; state.outgoing = [];
@@ -63,7 +77,8 @@
     if (state.socket) state.socket.disconnect();
     if (typeof window.io !== 'function') { toast('Không tải được kết nối thời gian thực. Hãy tải lại trang.', true); return; }
     state.socket = window.io({ withCredentials: true, reconnection: true });
-    state.socket.on('connect_error', () => {});
+    state.socket.on('connect_error', () => { toast('Không kết nối được máy chủ realtime.', true); });
+    installCallSocketHandlers(state.socket);
     state.socket.on('presence:initial', ids => { state.online = new Set(ids || []); renderSidebar(); if (state.selected) renderChatHeader(); });
     state.socket.on('presence:update', data => {
       if (data.online) state.online.add(data.userId); else state.online.delete(data.userId);
@@ -103,6 +118,7 @@
     await Promise.all([refreshFriends(), refreshRequests()]);
     renderSidebar(); updateRequestBadge();
   }
+  function renderSettings() { applyTheme(state.theme, false); }
   function renderMe() {
     if (!state.me) return;
     $('#myName').textContent = state.me.displayName;
@@ -128,6 +144,7 @@
     $('#chatView').classList.toggle('hidden', view !== 'chats' || !state.selected);
     $('#directoryView').classList.toggle('hidden', !['friends','requests'].includes(view));
     $('#profileView').classList.toggle('hidden', view !== 'profile');
+    $('#settingsView').classList.toggle('hidden', view !== 'settings');
     if (view === 'chats') {
       $('#topTitle').textContent = state.selected ? state.selected.displayName : 'Tin nhắn';
       $('#topSubtitle').textContent = state.selected ? 'Một góc nhỏ dành cho hai bạn.' : 'Một lời chào có thể bắt đầu điều tuyệt vời.';
@@ -135,9 +152,12 @@
       $('#topTitle').textContent = 'Bạn bè'; $('#topSubtitle').textContent = 'Những người bạn đã kết nối.';
     } else if (view === 'requests') {
       $('#topTitle').textContent = 'Lời mời kết bạn'; $('#topSubtitle').textContent = 'Mỗi kết nối mới là một câu chuyện.';
-    } else {
+    } else if (view === 'profile') {
       $('#topTitle').textContent = 'Hồ sơ của bạn'; $('#topSubtitle').textContent = 'Một chút về chính bạn.';
       renderMe();
+    } else {
+      $('#topTitle').textContent = 'Cài đặt'; $('#topSubtitle').textContent = 'Tùy chỉnh không gian của bạn.';
+      renderSettings();
     }
     renderSidebar();
     if (['friends','requests'].includes(view)) renderDirectory();
@@ -225,7 +245,7 @@
   function renderChatHeader() {
     if (!state.selected) return;
     const online = state.online.has(state.selected.id) || state.friends.some(f => f.id === state.selected.id && f.online);
-    $('#chatHeader').innerHTML = avatar(state.selected,'avatar')+'<div class="chat-person"><strong>'+esc(state.selected.displayName)+'</strong><small>'+(online?'<span class="online-dot"></span> Đang hoạt động':'@'+esc(state.selected.username)+' · '+esc(state.selected.publicId))+'</small></div><div class="chat-actions"><button type="button" title="Hồ sơ" data-action="view-profile" data-id="'+esc(state.selected.id)+'">☻</button><button type="button" title="Xóa bạn" data-action="unfriend" data-id="'+esc(state.selected.id)+'">♡</button></div>';
+    $('#chatHeader').innerHTML = avatar(state.selected,'avatar')+'<div class="chat-person"><strong>'+esc(state.selected.displayName)+'</strong><small>'+(online?'<span class="online-dot"></span> Đang hoạt động':'@'+esc(state.selected.username)+' · '+esc(state.selected.publicId))+'</small></div><div class="chat-actions"><button type="button" title="Gọi thoại" aria-label="Gọi thoại" data-action="call-voice" data-id="'+esc(state.selected.id)+'">☎</button><button type="button" title="Gọi video" aria-label="Gọi video" data-action="call-video" data-id="'+esc(state.selected.id)+'">▣</button><button type="button" title="Hồ sơ" data-action="view-profile" data-id="'+esc(state.selected.id)+'">☻</button><button type="button" title="Xóa bạn" data-action="unfriend" data-id="'+esc(state.selected.id)+'">♡</button></div>';
   }
   function formatTime(dateValue) {
     const date = new Date(dateValue);
@@ -249,8 +269,292 @@
     if (scrollBottom) area.scrollTop = area.scrollHeight;
   }
   async function performAction(action, id) {
+  function callErrorMessage(error) {
+    if (error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) return 'Bạn chưa cấp quyền sử dụng mic/camera. Hãy cho phép quyền trong trình duyệt rồi thử lại.';
+    if (error && (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError')) return 'Không tìm thấy mic hoặc camera phù hợp trên thiết bị này.';
+    if (error && (error.name === 'NotReadableError' || error.name === 'TrackStartError')) return 'Mic/camera có thể đang được ứng dụng khác sử dụng.';
+    return 'Không thể bắt đầu cuộc gọi. Hãy kiểm tra quyền mic/camera và thử lại.';
+  }
+  function showCallUi() {
+    const call = state.call;
+    if (!call) return;
+    $('#callOverlay').classList.remove('hidden');
+    $('#callWindowTitle').textContent = call.mode === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại';
+    $('#callPeerAvatar').innerHTML = call.peer ? (call.peer.avatar ? '<img alt="" src="'+esc(call.peer.avatar)+'">' : esc(initials(call.peer))) : '♡';
+    $('#voiceCallAvatar').innerHTML = call.peer ? (call.peer.avatar ? '<img alt="" src="'+esc(call.peer.avatar)+'">' : esc(initials(call.peer))) : '♡';
+    $('#callPeerName').textContent = call.peer ? call.peer.displayName : 'Bạn bè';
+    $('#incomingCallPanel').classList.toggle('hidden', call.status !== 'incoming');
+    $('#activeCallPanel').classList.toggle('hidden', call.status === 'incoming');
+    $('#callControls').classList.toggle('hidden', call.status === 'incoming');
+    $('#incomingCallTitle').textContent = call.mode === 'video' ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến';
+    $('#incomingCallDescription').textContent = (call.peer ? call.peer.displayName : 'Bạn bè') + (call.mode === 'video' ? ' đang muốn gọi video với bạn.' : ' đang muốn gọi thoại với bạn.');
+    $('#callStatus').textContent = callStatusText(call);
+    $('#voiceCallArtwork').classList.toggle('hidden', call.mode === 'video');
+    $('#remoteVideo').classList.toggle('hidden', call.mode !== 'video');
+    $('#localVideo').classList.toggle('hidden', call.mode !== 'video');
+    $('#callCameraButton').classList.toggle('hidden', call.mode !== 'video');
+    updateCallControls();
+  }
+  function callStatusText(call) {
+    if (call.status === 'incoming') return 'Cuộc gọi đến';
+    if (call.status === 'outgoing') return 'Đang đổ chuông…';
+    if (call.pc && call.pc.connectionState === 'connected') return call.mode === 'video' ? 'Đã kết nối video' : 'Đã kết nối thoại';
+    if (call.status === 'connecting') return 'Đang kết nối…';
+    return 'Đang trong cuộc gọi';
+  }
+  function updateCallControls() {
+    const call = state.call;
+    if (!call) return;
+    const micOn = !!(call.localStream && call.localStream.getAudioTracks().some(track => track.enabled));
+    $('#callMicButton').classList.toggle('control-off', !micOn);
+    $('#callMicButton').querySelector('small').textContent = micOn ? 'Tắt mic' : 'Bật mic';
+    $('#callMicButton').querySelector('span').textContent = micOn ? '🎙' : '🔇';
+    const cameraTrack = call.localStream && call.localStream.getVideoTracks()[0];
+    const cameraOn = !!(cameraTrack && cameraTrack.enabled);
+    $('#callCameraButton').classList.toggle('control-off', !cameraOn);
+    $('#callCameraButton').querySelector('small').textContent = cameraOn ? 'Tắt cam' : 'Bật cam';
+    $('#callCameraButton').querySelector('span').textContent = cameraOn ? '▣' : '◻';
+    $('#callStatus').textContent = callStatusText(call);
+  }
+  function setupPeerConnection(call) {
+    if (call.pc) return call.pc;
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
+    call.pc = pc;
+    for (const track of (call.localStream ? call.localStream.getTracks() : [])) pc.addTrack(track, call.localStream);
+    pc.onicecandidate = event => {
+      if (event.candidate && state.call && state.call.id === call.id && state.socket) {
+        state.socket.emit('call:signal', { to: call.peerId, callId: call.id, kind: 'ice', candidate: event.candidate.toJSON() }, response => {
+          if (response && !response.ok) toast(response.error || 'Không gửi được tín hiệu cuộc gọi.', true);
+        });
+      }
+    };
+    pc.ontrack = event => {
+      if (!state.call || state.call.id !== call.id) return;
+      const remoteStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+      call.remoteStream = remoteStream;
+      if (call.mode === 'video') {
+        $('#remoteVideo').srcObject = remoteStream;
+        $('#remoteVideo').play().catch(() => {});
+      } else {
+        $('#remoteAudio').srcObject = remoteStream;
+        $('#remoteAudio').play().catch(() => {});
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (!state.call || state.call.id !== call.id) return;
+      if (pc.connectionState === 'connected') call.status = 'connected';
+      if (pc.connectionState === 'failed') {
+        $('#callStatus').textContent = 'Không kết nối được. Có thể cần mạng khác hoặc máy chủ TURN.';
+        toast('Cuộc gọi chưa kết nối được. Hãy thử lại hoặc đổi mạng.', true);
+      } else {
+        updateCallControls();
+      }
+    };
+    pc.oniceconnectionstatechange = () => {
+      if (state.call && state.call.id === call.id && pc.iceConnectionState === 'failed') {
+        $('#callStatus').textContent = 'Mạng không thể thiết lập đường truyền P2P.';
+      }
+    };
+    return pc;
+  }
+  function sendCallSignal(call, kind, payload) {
+    if (!state.socket || !call) return;
+    state.socket.emit('call:signal', Object.assign({ to: call.peerId, callId: call.id, kind }, payload), response => {
+      if (response && !response.ok) {
+        toast(response.error || 'Không gửi được tín hiệu cuộc gọi.', true);
+        cleanupCall();
+      }
+    });
+  }
+  async function createAndSendOffer(call) {
+    const pc = setupPeerConnection(call);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendCallSignal(call, 'offer', { description: pc.localDescription.toJSON ? pc.localDescription.toJSON() : pc.localDescription });
+  }
+  async function flushIceCandidates(call) {
+    if (!call.pc || !call.pc.remoteDescription || !call.pendingIce) return;
+    const pending = call.pendingIce.splice(0);
+    for (const candidate of pending) {
+      try { await call.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (error) { console.warn('ICE candidate skipped', error && error.name); }
+    }
+  }
+  async function handleCallSignal(data) {
+    const call = state.call;
+    if (!call || !data || data.callId !== call.id || data.from !== call.peerId) return;
     try {
-      if (action === 'add') {
+      const pc = setupPeerConnection(call);
+      if (data.kind === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.description));
+        await flushIceCandidates(call);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        call.status = 'connecting';
+        showCallUi();
+        sendCallSignal(call, 'answer', { description: pc.localDescription.toJSON ? pc.localDescription.toJSON() : pc.localDescription });
+      } else if (data.kind === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.description));
+        await flushIceCandidates(call);
+        call.status = 'connecting';
+        showCallUi();
+      } else if (data.kind === 'ice' && data.candidate) {
+        if (!pc.remoteDescription) (call.pendingIce || (call.pendingIce = [])).push(data.candidate);
+        else await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    } catch (error) {
+      console.error('Call signaling failed:', error && error.name);
+      $('#callStatus').textContent = 'Có lỗi khi thiết lập cuộc gọi.';
+      toast('Không thể kết nối cuộc gọi. Hãy thử lại nhé.', true);
+    }
+  }
+  async function startCall(mode, peerId) {
+    if (state.call) { toast('Bạn đang có một cuộc gọi khác.', true); return; }
+    const peer = state.friends.find(friend => friend.id === peerId) || (state.selected && state.selected.id === peerId ? state.selected : null);
+    if (!peer) { toast('Bạn cần kết bạn với người này trước khi gọi.', true); return; }
+    if (!state.socket || !state.socket.connected) { toast('Máy chủ realtime chưa kết nối. Hãy thử tải lại trang.', true); return; }
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      toast('Trình duyệt chưa hỗ trợ mic/camera. Hãy mở trang bằng HTTPS và thử lại.', true); return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: mode === 'video' });
+    } catch (error) {
+      toast(callErrorMessage(error), true); return;
+    }
+    const id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : 'call-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    const call = { id, peerId, peer, mode, role: 'caller', status: 'outgoing', localStream: stream, remoteStream: null, pc: null, pendingIce: [] };
+    state.call = call;
+    if (mode === 'video') $('#localVideo').srcObject = stream;
+    showCallUi();
+    state.socket.emit('call:invite', { to: peerId, callId: id, mode }, async response => {
+      if (!response || !response.ok) {
+        cleanupCall();
+        toast((response && response.error) || 'Không gửi được lời mời gọi.', true);
+      } else {
+        $('#callStatus').textContent = 'Đang đổ chuông…';
+      }
+    });
+  }
+  async function acceptCall() {
+    const call = state.call;
+    if (!call || call.status !== 'incoming') return;
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      toast('Hãy mở trang bằng HTTPS để dùng mic/camera.', true); declineCall('unsupported'); return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.mode === 'video' });
+    } catch (error) {
+      toast(callErrorMessage(error), true); declineCall('permission-denied'); return;
+    }
+    if (!state.call || state.call.id !== call.id) { stream.getTracks().forEach(track => track.stop()); return; }
+    call.localStream = stream;
+    call.status = 'connecting';
+    if (call.mode === 'video') $('#localVideo').srcObject = stream;
+    setupPeerConnection(call);
+    showCallUi();
+    state.socket.emit('call:accept', { callId: call.id }, response => {
+      if (!response || !response.ok) {
+        toast((response && response.error) || 'Cuộc gọi không còn khả dụng.', true);
+        cleanupCall();
+      }
+    });
+  }
+  function declineCall(reason = 'declined') {
+    const call = state.call;
+    if (!call) return;
+    if (state.socket) state.socket.emit('call:decline', { callId: call.id, reason });
+    cleanupCall();
+  }
+  function endCall() {
+    const call = state.call;
+    if (!call) return;
+    if (state.socket) state.socket.emit('call:end', { callId: call.id });
+    cleanupCall();
+  }
+  function cleanupCall() {
+    const call = state.call;
+    if (call) {
+      if (call.pc) {
+        call.pc.ontrack = null;
+        call.pc.onicecandidate = null;
+        call.pc.onconnectionstatechange = null;
+        try { call.pc.close(); } catch {}
+      }
+      if (call.localStream) call.localStream.getTracks().forEach(track => track.stop());
+      if (call.remoteStream) call.remoteStream.getTracks().forEach(track => track.stop());
+    }
+    state.call = null;
+    $('#callOverlay').classList.add('hidden');
+    $('#remoteVideo').srcObject = null;
+    $('#localVideo').srcObject = null;
+    $('#remoteAudio').srcObject = null;
+  }
+  function toggleCallMic() {
+    const call = state.call;
+    if (!call || !call.localStream) return;
+    const tracks = call.localStream.getAudioTracks();
+    if (!tracks.length) { toast('Không tìm thấy micrô trong cuộc gọi.', true); return; }
+    const enabled = tracks.some(track => track.enabled);
+    tracks.forEach(track => { track.enabled = !enabled; });
+    updateCallControls();
+  }
+  function toggleCallCamera() {
+    const call = state.call;
+    if (!call || call.mode !== 'video' || !call.localStream) return;
+    const tracks = call.localStream.getVideoTracks();
+    if (!tracks.length) { toast('Không tìm thấy camera trong cuộc gọi.', true); return; }
+    const enabled = tracks.some(track => track.enabled);
+    tracks.forEach(track => { track.enabled = !enabled; });
+    updateCallControls();
+  }
+  function installCallSocketHandlers(socket) {
+    socket.on('call:incoming', data => {
+      if (!data || !data.callId || !data.caller || state.call) {
+        if (data && data.callId) socket.emit('call:decline', { callId: data.callId, reason: 'busy' });
+        return;
+      }
+      state.call = { id: data.callId, peerId: data.caller.id, peer: data.caller, mode: data.mode === 'video' ? 'video' : 'audio', role: 'callee', status: 'incoming', localStream: null, remoteStream: null, pc: null, pendingIce: [] };
+      showCallUi();
+    });
+    socket.on('call:accepted', data => {
+      const call = state.call;
+      if (!call || !data || call.id !== data.callId || call.role !== 'caller') return;
+      call.status = 'connecting';
+      showCallUi();
+      createAndSendOffer(call).catch(error => {
+        console.error('Cannot create call offer:', error && error.name);
+        toast('Không tạo được kết nối cuộc gọi.', true);
+        endCall();
+      });
+    });
+    socket.on('call:signal', data => { handleCallSignal(data); });
+    socket.on('call:declined', data => {
+      if (state.call && data && state.call.id === data.callId) {
+        const name = state.call.peer ? state.call.peer.displayName : 'Người nhận';
+        cleanupCall(); toast(name + ' đã từ chối cuộc gọi.');
+      }
+    });
+    socket.on('call:ended', data => {
+      if (state.call && data && state.call.id === data.callId) {
+        cleanupCall();
+        if (data.reason !== 'disconnected') toast('Cuộc gọi đã kết thúc.');
+      }
+    });
+  }
+
+  async function performAction(action, id) {
+    try {
+      if (action === 'call-voice') {
+        await startCall('audio', id);
+      } else if (action === 'call-video') {
+        await startCall('video', id);
+      } else if (action === 'add') {
         const data = await api('/api/friends/request',{method:'POST',body:JSON.stringify({userId:id})});
         toast(data.message || 'Đã gửi lời mời kết bạn.');
         await refreshAll(); if (state.query) await doSearch(state.query);
@@ -321,6 +625,20 @@
   $('#chatHeader').addEventListener('click',event=>{
     const control=event.target.closest('[data-action]'); if(control) performAction(control.dataset.action,control.dataset.id);
   });
+  $('#settingsView').addEventListener('click', event => {
+    const choice = event.target.closest('[data-theme-choice]');
+    if (choice) applyTheme(choice.dataset.themeChoice);
+  });
+  $('#acceptCallButton').addEventListener('click', () => { acceptCall(); });
+  $('#declineCallButton').addEventListener('click', () => { declineCall(); });
+  $('#endCallButton').addEventListener('click', endCall);
+  $('#callCloseButton').addEventListener('click', () => {
+    if (state.call && state.call.status === 'incoming') declineCall();
+    else endCall();
+  });
+  $('#callMicButton').addEventListener('click', toggleCallMic);
+  $('#callCameraButton').addEventListener('click', toggleCallCamera);
+
   $('#sendForm').addEventListener('submit',event=>{
     event.preventDefault();
     const text=$('#messageInput').value.trim();
