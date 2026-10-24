@@ -1,11 +1,29 @@
 services:
   - type: web
-    name: chrono-phantom-online
+    name: messenger-umi-maki
     runtime: node
     plan: free
+    region: singapore
+    branch: umi-maki-messenger
+    rootDir: messenger-umi-maki
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /health
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
     envVars:
-      - key: NODE_VERSION
-        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: umi-maki-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+databases:
+  - name: umi-maki-db
+    databaseName: umi_maki_db
+    user: umi_maki_db_user
+    plan: free
+    region: singapore
+    ipAllowList: []
