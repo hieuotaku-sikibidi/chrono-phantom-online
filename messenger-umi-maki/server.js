@@ -8,15 +8,27 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
+const { newDb, DataType } = require('pg-mem');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) { console.error('Missing DATABASE_URL'); process.exit(1); }
 if (!JWT_SECRET || JWT_SECRET.length < 32) { console.error('JWT_SECRET must be at least 32 characters'); process.exit(1); }
 
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' || process.env.NODE_ENV !== 'production' ? false : { rejectUnauthorized: false }, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
+let pool;
+if (DATABASE_URL) {
+  pool = new Pool({ connectionString: DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' || process.env.NODE_ENV !== 'production' ? false : { rejectUnauthorized: false }, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
+} else if (process.env.ALLOW_EPHEMERAL_DB === 'true') {
+  const memoryDb = newDb({ autoCreateForeignKeyIndices: true });
+  memoryDb.public.registerFunction({ name: 'gen_random_uuid', returns: DataType.uuid, implementation: () => crypto.randomUUID() });
+  const memoryAdapter = memoryDb.adapters.createPg();
+  pool = new memoryAdapter.Pool();
+  console.warn('WARNING: using ephemeral in-memory database; all accounts and messages reset on service restart or redeploy.');
+} else {
+  console.error('Missing DATABASE_URL. Configure PostgreSQL or explicitly enable ALLOW_EPHEMERAL_DB=true for a temporary demo.');
+  process.exit(1);
+}
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e6 });
