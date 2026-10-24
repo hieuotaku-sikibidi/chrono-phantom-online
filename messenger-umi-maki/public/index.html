@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#6654d9">
+  <meta name="description" content="Messenger Umi and Maki — kết bạn bằng ID, tạo hồ sơ và trò chuyện trực tuyến.">
+  <title>Messenger Umi and Maki</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="auth-screen" id="authScreen">
+    <section class="auth-art">
+      <div class="brand"><span class="brand-mark">u<span>♡</span>m</span><span>Umi <i>and</i> Maki</span></div>
+      <div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div>
+      <div class="hero-bubble bubble-a">✦</div><div class="hero-bubble bubble-b">♡</div>
+      <div class="hero-copy">
+        <div class="eyebrow">A LITTLE SPACE FOR YOUR PEOPLE</div>
+        <h1>Khoảng cách<br>không còn xa.</h1>
+        <p>Kết bạn bằng một ID. Trò chuyện bằng cả trái tim.</p>
+      </div>
+      <div class="art-footer"><span>✧</span> Made for Umi &amp; Maki <span>✧</span></div>
+    </section>
+    <section class="auth-side">
+      <div class="auth-card">
+        <div class="mobile-brand brand"><span class="brand-mark">u<span>♡</span>m</span><span>Umi <i>and</i> Maki</span></div>
+        <div class="auth-heading"><span class="kicker">CHÀO BẠN,</span><h2 id="authTitle">Đăng nhập nhé.</h2><p id="authSubtitle">Tiếp tục câu chuyện của bạn.</p></div>
+        <form id="loginForm" class="auth-form">
+          <label>Username hoặc ID<input id="loginIdentifier" autocomplete="username" required placeholder="vd: maki hoặc UM-AB12CD34"></label>
+          <label>Mật khẩu<input id="loginPassword" type="password" autocomplete="current-password" required minlength="8" placeholder="Nhập mật khẩu của bạn"></label>
+          <button class="primary-btn wide" type="submit">Đăng nhập <span>↗</span></button>
+          <div class="form-note" id="loginNote" aria-live="polite"></div>
+          <p class="switch-line">Chưa có tài khoản? <button type="button" class="text-btn" id="showRegister">Tạo tài khoản</button></p>
+        </form>
+        <form id="registerForm" class="auth-form hidden">
+          <label>Tên hiển thị<input id="registerDisplay" autocomplete="name" maxlength="32" required placeholder="Tên mọi người sẽ nhìn thấy"></label>
+          <label>Username<input id="registerUsername" autocomplete="username" minlength="3" maxlength="24" pattern="[A-Za-z0-9._]{3,24}" required placeholder="vd: umi.maki"></label>
+          <label>Mật khẩu<input id="registerPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Ít nhất 8 ký tự"></label>
+          <button class="primary-btn wide" type="submit">Tạo tài khoản <span>♡</span></button>
+          <div class="form-note" id="registerNote" aria-live="polite"></div>
+          <p class="switch-line">Đã có tài khoản? <button type="button" class="text-btn" id="showLogin">Đăng nhập</button></p>
+        </form>
+        <p class="privacy-note"><span>✦</span> Tài khoản, bạn bè và tin nhắn được lưu trên máy chủ.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="app-screen hidden" id="appScreen">
+    <aside class="sidebar">
+      <div class="sidebar-brand brand"><span class="brand-mark">u<span>♡</span>m</span><span>Umi <i>and</i> Maki</span></div>
+      <button class="my-profile" id="myProfileButton" type="button">
+        <span class="avatar avatar-large" id="myAvatar">U</span>
+        <span class="profile-text"><strong id="myName">Bạn</strong><small id="myHandle">@username</small></span>
+        <span class="chevron">⌄</span>
+      </button>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="userSearch" type="search" placeholder="Tìm người bằng ID hoặc tên…" aria-label="Tìm người dùng">
+        <button class="clear-search hidden" id="clearSearch" type="button" aria-label="Xóa tìm kiếm">×</button>
+      </div>
+      <nav class="main-nav" aria-label="Điều hướng">
+        <button class="nav-item active" data-view="chats" type="button"><span class="nav-icon">▤</span> Tin nhắn</button>
+        <button class="nav-item" data-view="friends" type="button"><span class="nav-icon">♡</span> Bạn bè</button>
+        <button class="nav-item" data-view="requests" type="button"><span class="nav-icon">♧</span> Lời mời <span class="count-badge hidden" id="requestCount">0</span></button>
+      </nav>
+      <div class="list-heading"><span id="sidebarHeading">GẦN ĐÂY</span><button type="button" id="newChatHint" title="Tìm bạn mới">＋</button></div>
+      <div class="sidebar-list" id="sidebarList"><div class="list-empty">Chưa có cuộc trò chuyện.<br>Tìm bạn để bắt đầu nhé ♡</div></div>
+      <div class="sidebar-bottom"><span class="online-dot"></span><span>Không gian của bạn</span><button type="button" id="logoutButton" title="Đăng xuất">↪</button></div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="topbar-title"><span class="small-spark">✦</span><div><strong id="topTitle">Tin nhắn</strong><small id="topSubtitle">Một lời chào có thể bắt đầu điều tuyệt vời.</small></div></div>
+        <div class="topbar-right"><span class="secure-label"><span>●</span> Kết nối trực tuyến</span><button class="icon-button" id="topProfileButton" type="button" aria-label="Hồ sơ">☻</button></div>
+      </header>
+      <div class="main-content" id="mainContent">
+        <section id="emptyState" class="empty-state">
+          <div class="empty-art"><div class="empty-glow"></div><div class="floating-heart heart-one">♡</div><div class="floating-heart heart-two">✦</div><div class="chat-illustration"><span class="chat-shape shape-back">•••</span><span class="chat-shape shape-front">♡</span></div></div>
+          <div class="empty-kicker">YOUR SPACE, YOUR PEOPLE</div><h1>Mọi cuộc trò chuyện<br>đều bắt đầu từ <em>một lời chào.</em></h1>
+          <p>Tìm người bạn muốn gặp qua tên hoặc ID Umi của họ.<br>Kết bạn rồi nhắn tin ở bất cứ đâu.</p>
+          <button class="primary-btn" id="findFriendButton" type="button">Tìm bạn mới <span>↗</span></button>
+        </section>
+        <section id="chatView" class="chat-view hidden">
+          <header class="chat-header" id="chatHeader"></header>
+          <div class="messages-area" id="messagesArea"><div class="chat-start-note">Đây là nơi câu chuyện của hai bạn bắt đầu ♡</div></div>
+          <div class="composer-wrap">
+            <div class="composer-hint">Hãy tử tế — ở phía bên kia màn hình cũng là một người thật.</div>
+            <form id="sendForm" class="composer"><textarea id="messageInput" rows="1" maxlength="2000" placeholder="Viết tin nhắn…" aria-label="Tin nhắn"></textarea><button class="send-button" type="submit" aria-label="Gửi tin nhắn">➤</button></form>
+          </div>
+        </section>
+        <section id="directoryView" class="directory-view hidden">
+          <div class="directory-heading"><div><span class="kicker" id="directoryKicker">YOUR CIRCLE</span><h1 id="directoryTitle">Bạn bè</h1><p id="directoryDescription">Những người khiến ngày của bạn vui hơn.</p></div><span class="directory-decoration">♡</span></div>
+          <div id="directoryContent" class="directory-content"></div>
+        </section>
+        <section id="profileView" class="directory-view hidden">
+          <div class="directory-heading"><div><span class="kicker">THIS IS YOU</span><h1>Hồ sơ của bạn</h1><p>Hãy để bạn bè biết thêm một chút về bạn.</p></div><span class="directory-decoration">✦</span></div>
+          <form id="profileForm" class="profile-edit-card">
+            <div class="profile-preview-row"><span class="avatar avatar-xl" id="profilePreview">U</span><div><strong id="profilePublicId">UM-XXXXXXXX</strong><small>ID riêng của bạn · chia sẻ ID này để mọi người tìm thấy bạn</small><button class="text-btn" id="copyIdButton" type="button">Sao chép ID</button></div></div>
+            <label>Tên hiển thị<input id="profileDisplay" maxlength="32" required></label>
+            <label>Username <input id="profileUsername" disabled></label>
+            <label>Giới thiệu<textarea id="profileBio" rows="3" maxlength="180" placeholder="Một chút về bạn…"></textarea></label>
+            <label>Ảnh đại diện <input id="profileAvatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+            <div class="profile-actions"><button class="secondary-btn" type="button" id="removeAvatarButton">Bỏ ảnh</button><button class="primary-btn" type="submit">Lưu hồ sơ <span>✓</span></button></div>
+            <div class="form-note" id="profileNote" aria-live="polite"></div>
+          </form>
+        </section>
+      </div>
+      <footer class="app-footer"><span>Umi <i>and</i> Maki</span><span>Những người xa nhau vẫn có thể ở gần. <b>♡</b></span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
