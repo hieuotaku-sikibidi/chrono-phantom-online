@@ -1,7 +1,8 @@
 'use strict';
 (() => {
   const $ = selector => document.querySelector(selector);
-  const state = { me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined, theme: localStorage.getItem('umi_theme') === 'dark' ? 'dark' : 'light', call: null };
+  const savedSoundVolume = Number(localStorage.getItem('umi_sound_volume'));
+  const state = { me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined, theme: localStorage.getItem('umi_theme') === 'dark' ? 'dark' : 'light', soundsEnabled: localStorage.getItem('umi_sounds_enabled') !== 'false', soundVolume: Number.isFinite(savedSoundVolume) && localStorage.getItem('umi_sound_volume') !== null ? Math.max(0, Math.min(100, savedSoundVolume)) : 55, call: null };
   let toastTimer = null, searchTimer = null;
   function applyTheme(theme, save = true) {
     state.theme = theme === 'dark' ? 'dark' : 'light';
@@ -16,6 +17,77 @@
   }
   applyTheme(state.theme, false);
 
+  // Lightweight synthesized UI sounds: no external audio files or third-party requests.
+  let soundContext = null;
+  let ringtoneTimer = null;
+  const soundPatterns = {
+    tap: [{ f: 520, d: 0.035, o: 0, w: 'sine', g: 0.22 }],
+    send: [{ f: 620, d: 0.07, o: 0, w: 'sine', g: 0.38 }, { f: 880, d: 0.09, o: 0.065, w: 'sine', g: 0.34 }],
+    receive: [{ f: 587, d: 0.095, o: 0, w: 'sine', g: 0.38 }, { f: 784, d: 0.13, o: 0.085, w: 'sine', g: 0.42 }],
+    notify: [{ f: 740, d: 0.09, o: 0, w: 'sine', g: 0.34 }, { f: 988, d: 0.14, o: 0.095, w: 'sine', g: 0.4 }],
+    friend: [{ f: 523, d: 0.1, o: 0, w: 'sine', g: 0.36 }, { f: 659, d: 0.11, o: 0.09, w: 'sine', g: 0.4 }, { f: 784, d: 0.16, o: 0.19, w: 'sine', g: 0.42 }],
+    connect: [{ f: 659, d: 0.08, o: 0, w: 'sine', g: 0.3 }, { f: 784, d: 0.09, o: 0.075, w: 'sine', g: 0.34 }, { f: 1046, d: 0.15, o: 0.16, w: 'sine', g: 0.38 }],
+    ring: [{ f: 523, d: 0.18, o: 0, w: 'sine', g: 0.43 }, { f: 659, d: 0.18, o: 0.2, w: 'sine', g: 0.43 }, { f: 784, d: 0.18, o: 0.4, w: 'sine', g: 0.43 }, { f: 659, d: 0.2, o: 0.6, w: 'sine', g: 0.38 }]
+  };
+  function getSoundContext() {
+    if (!state.soundsEnabled || state.soundVolume <= 0) return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    try {
+      if (!soundContext) soundContext = new AudioContextClass();
+      if (soundContext.state === 'suspended') soundContext.resume().catch(() => {});
+      return soundContext;
+    } catch { return null; }
+  }
+  function playSound(name) {
+    if (!state.soundsEnabled || state.soundVolume <= 0) return;
+    const context = getSoundContext();
+    const pattern = soundPatterns[name];
+    if (!context || !pattern) return;
+    const volume = state.soundVolume / 100;
+    const now = context.currentTime;
+    for (const note of pattern) {
+      try {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = now + note.o;
+        const end = start + note.d;
+        oscillator.type = note.w || 'sine';
+        oscillator.frequency.setValueAtTime(note.f, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume * (note.g || 0.35) * 0.16), start + Math.min(0.015, note.d / 3));
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(end + 0.02);
+      } catch {}
+    }
+  }
+  function stopRingtone() {
+    if (ringtoneTimer !== null) window.clearTimeout(ringtoneTimer);
+    ringtoneTimer = null;
+  }
+  function startRingtone() {
+    stopRingtone();
+    const ring = () => {
+      if (!state.soundsEnabled || !state.call || !['incoming', 'outgoing'].includes(state.call.status)) {
+        ringtoneTimer = null;
+        return;
+      }
+      playSound('ring');
+      ringtoneTimer = window.setTimeout(ring, 2700);
+    };
+    ring();
+  }
+  // Browsers require a user gesture before playing audio; prepare the audio context on first use.
+  document.addEventListener('pointerdown', () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!soundContext && AudioContextClass) soundContext = new AudioContextClass();
+      if (soundContext && soundContext.state === 'suspended') soundContext.resume().catch(() => {});
+    } catch {}
+  }, { once: true, passive: true });
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -89,7 +161,12 @@
       if (state.view === 'friends') renderDirectory();
     });
     state.socket.on('friends:refresh', async () => {
+      const previousIncomingIds = new Set(state.incoming.map(user => user.id));
       await refreshAll();
+      if (state.incoming.some(user => !previousIncomingIds.has(user.id))) {
+        playSound('friend');
+        if (document.hidden) toast('Bạn có lời mời kết bạn mới.');
+      }
       if (state.selected) {
         const latest = state.friends.find(friend => friend.id === state.selected.id);
         if (latest) { state.selected = { ...state.selected, ...latest }; renderChatHeader(); renderMessages(false); }
@@ -99,6 +176,12 @@
       if (data && data.user && state.me && data.user.id === state.me.id) { state.me = data.user; renderMe(); }
     });
     state.socket.on('message:new', message => {
+      const sentByMe = !!(state.me && message.senderId === state.me.id);
+      playSound(sentByMe ? 'send' : 'receive');
+      if (!sentByMe && (!state.selected || state.selected.id !== message.senderId || state.view !== 'chats' || document.hidden)) {
+        const sender = state.friends.find(friend => friend.id === message.senderId);
+        toast('Tin nhắn mới từ ' + (sender ? sender.displayName : 'bạn bè') + '.');
+      }
       if (state.selected && (message.senderId === state.selected.id || message.recipientId === state.selected.id)) {
         if (!state.messages.some(m => m.id === message.id)) state.messages.push(message);
         renderMessages(true);
@@ -121,7 +204,17 @@
     await Promise.all([refreshFriends(), refreshRequests()]);
     renderSidebar(); updateRequestBadge();
   }
-  function renderSettings() { applyTheme(state.theme, false); }
+  function renderSettings() {
+    applyTheme(state.theme, false);
+    const soundToggle = $('#soundEnabledToggle');
+    const volumeSlider = $('#soundVolumeSlider');
+    const volumeValue = $('#soundVolumeValue');
+    const soundStatus = $('#soundStatusLabel');
+    if (soundToggle) soundToggle.checked = state.soundsEnabled;
+    if (volumeSlider) volumeSlider.value = String(state.soundVolume);
+    if (volumeValue) volumeValue.textContent = state.soundVolume + '%';
+    if (soundStatus) soundStatus.textContent = state.soundsEnabled ? 'Đang bật' : 'Đang tắt';
+  }
   function renderMe() {
     if (!state.me) return;
     $('#myName').textContent = state.me.displayName;
@@ -431,6 +524,7 @@
     const id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : 'call-' + Date.now() + '-' + Math.random().toString(16).slice(2);
     const call = { id, peerId, peer, mode, role: 'caller', status: 'outgoing', localStream: stream, remoteStream: null, pc: null, pendingIce: [] };
     state.call = call;
+    startRingtone();
     if (mode === 'video') $('#localVideo').srcObject = stream;
     showCallUi();
     state.socket.emit('call:invite', { to: peerId, callId: id, mode }, async response => {
@@ -480,6 +574,7 @@
     cleanupCall();
   }
   function cleanupCall() {
+    stopRingtone();
     const call = state.call;
     if (call) {
       if (call.pc) {
@@ -523,11 +618,15 @@
       }
       state.call = { id: data.callId, peerId: data.caller.id, peer: data.caller, mode: data.mode === 'video' ? 'video' : 'audio', role: 'callee', status: 'incoming', localStream: null, remoteStream: null, pc: null, pendingIce: [] };
       showCallUi();
+      playSound('notify');
+      startRingtone();
     });
     socket.on('call:accepted', data => {
       const call = state.call;
       if (!call || !data || call.id !== data.callId || call.role !== 'caller') return;
       call.status = 'connecting';
+      stopRingtone();
+      playSound('connect');
       showCallUi();
       createAndSendOffer(call).catch(error => {
         console.error('Cannot create call offer:', error && error.name);
@@ -558,10 +657,12 @@
         await startCall('video', id);
       } else if (action === 'add') {
         const data = await api('/api/friends/request',{method:'POST',body:JSON.stringify({userId:id})});
+        playSound('friend');
         toast(data.message || 'Đã gửi lời mời kết bạn.');
         await refreshAll(); if (state.query) await doSearch(state.query);
       } else if (action === 'accept') {
         await api('/api/friends/'+encodeURIComponent(id)+'/accept',{method:'POST'});
+        playSound('connect');
         toast('Hai bạn đã trở thành bạn bè! ♡'); await refreshAll(); if (state.query) await doSearch(state.query);
         const user = state.friends.find(f=>f.id===id); if (user) await openChat(id);
       } else if (action === 'decline') {
@@ -629,7 +730,30 @@
   });
   $('#settingsView').addEventListener('click', event => {
     const choice = event.target.closest('[data-theme-choice]');
-    if (choice) applyTheme(choice.dataset.themeChoice);
+    if (choice) { applyTheme(choice.dataset.themeChoice); playSound('tap'); }
+  });
+  $('#soundEnabledToggle').addEventListener('change', event => {
+    state.soundsEnabled = !!event.target.checked;
+    try { localStorage.setItem('umi_sounds_enabled', String(state.soundsEnabled)); } catch {}
+    renderSettings();
+    if (!state.soundsEnabled) stopRingtone();
+    else {
+      playSound('notify');
+      if (state.call && ['incoming', 'outgoing'].includes(state.call.status)) startRingtone();
+    }
+  });
+  $('#soundVolumeSlider').addEventListener('input', event => {
+    state.soundVolume = Math.max(0, Math.min(100, Number(event.target.value) || 0));
+    try { localStorage.setItem('umi_sound_volume', String(state.soundVolume)); } catch {}
+    $('#soundVolumeValue').textContent = state.soundVolume + '%';
+  });
+  $('#soundTestButton').addEventListener('click', () => {
+    if (!state.soundsEnabled) {
+      toast('Bật hiệu ứng âm thanh trước khi nghe thử nhé.');
+      return;
+    }
+    playSound('notify');
+    toast('Đã phát âm thanh thử ♫');
   });
   $('#acceptCallButton').addEventListener('click', () => { acceptCall(); });
   $('#declineCallButton').addEventListener('click', () => { declineCall(); });
