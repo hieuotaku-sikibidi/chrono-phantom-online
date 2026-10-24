@@ -4,10 +4,12 @@ const { io } = require('socket.io-client');
 const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3100';
 const suffix = Math.random().toString(36).slice(2, 9);
 
-async function request(path, { token, method = 'GET', body } = {}) {
+async function request(path, { token, cookie, method = 'GET', body, origin } = {}) {
   const response = await fetch(base + path, {
     method,
     headers: {
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(origin ? { Origin: origin } : {}),
       ...(token ? { Authorization: 'Bearer ' + token } : {}),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
     },
@@ -17,6 +19,19 @@ async function request(path, { token, method = 'GET', body } = {}) {
   try { data = await response.json(); } catch {}
   if (!response.ok) throw new Error(method + ' ' + path + ': ' + response.status + ' ' + (data.error || JSON.stringify(data)));
   return data;
+}
+async function authRequest(path, body) {
+  const response = await fetch(base + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error('POST ' + path + ': ' + response.status + ' ' + (data.error || JSON.stringify(data)));
+  const cookie = (response.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(cookie, /^umi_auth=/, 'login/register should issue an authentication cookie');
+  return { ...data, cookie };
 }
 async function waitConnected(socket) {
   await Promise.race([
@@ -30,29 +45,37 @@ async function waitConnected(socket) {
 async function main() {
   const health = await request('/api/health');
   assert.equal(health.ok, true);
-  const one = await request('/api/auth/register', {
-    method: 'POST', body: { displayName: 'Test Umi', username: 'testumi_' + suffix, password: 'Test-password-123' }
+  const unauthenticated = await fetch(base + '/api/me');
+  assert.equal(unauthenticated.status, 401, 'private account endpoint must reject anonymous requests');
+  const one = await authRequest('/api/auth/register', {
+    displayName: 'Test Umi', username: 'testumi_' + suffix, password: 'Test-password-123'
   });
-  const two = await request('/api/auth/register', {
-    method: 'POST', body: { displayName: 'Test Maki', username: 'testmaki_' + suffix, password: 'Test-password-456' }
+  const two = await authRequest('/api/auth/register', {
+    displayName: 'Test Maki', username: 'testmaki_' + suffix, password: 'Test-password-456'
   });
   assert.match(one.user.publicId, /^UM-[A-F0-9]{8}$/);
   assert.notEqual(one.user.id, two.user.id);
-  const login = await request('/api/auth/login', {
-    method: 'POST', body: { identifier: two.user.username, password: 'Test-password-456' }
-  });
+  assert.equal('token' in one, false, 'auth token must not be exposed in JSON');
+  const login = await authRequest('/api/auth/login', { identifier: two.user.username, password: 'Test-password-456' });
   assert.equal(login.user.id, two.user.id);
-  const search = await request('/api/users/search?q=' + encodeURIComponent(two.user.username), { token: one.token });
+  const meFromCookie = await request('/api/me', { cookie: login.cookie });
+  assert.equal(meFromCookie.user.id, two.user.id, 'HttpOnly cookie should authenticate API requests');
+  const wrongPassword = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: two.user.username, password: 'definitely-wrong-password' })
+  });
+  assert.equal(wrongPassword.status, 401, 'wrong password should be rejected');
+  const search = await request('/api/users/search?q=' + encodeURIComponent(two.user.username), { cookie: one.cookie });
   assert.ok(search.users.some(user => user.id === two.user.id), 'user search should find a user');
-  await request('/api/friends/request', { token: one.token, method: 'POST', body: { userId: two.user.id } });
-  const incoming = await request('/api/friends/requests', { token: two.token });
+  await request('/api/friends/request', { cookie: one.cookie, method: 'POST', body: { userId: two.user.id } });
+  const incoming = await request('/api/friends/requests', { cookie: two.cookie });
   assert.ok(incoming.incoming.some(user => user.id === one.user.id), 'incoming friend request should appear');
-  await request('/api/friends/' + encodeURIComponent(one.user.id) + '/accept', { token: two.token, method: 'POST' });
-  const friends = await request('/api/friends', { token: one.token });
+  await request('/api/friends/' + encodeURIComponent(one.user.id) + '/accept', { cookie: two.cookie, method: 'POST' });
+  const friends = await request('/api/friends', { cookie: one.cookie });
   assert.ok(friends.friends.some(user => user.id === two.user.id), 'friend list should include accepted friend');
 
-  const socketA = io(base, { auth: { token: one.token }, transports: ['websocket'] });
-  const socketB = io(base, { auth: { token: two.token }, transports: ['websocket'] });
+  const socketA = io(base, { extraHeaders: { Cookie: one.cookie }, transports: ['websocket'] });
+  const socketB = io(base, { extraHeaders: { Cookie: two.cookie }, transports: ['websocket'] });
   try {
     await Promise.all([waitConnected(socketA), waitConnected(socketB)]);
     const inbound = new Promise((resolve, reject) => {
@@ -72,12 +95,23 @@ async function main() {
     assert.equal(message.senderId, one.user.id);
     assert.equal(message.recipientId, two.user.id);
     assert.equal(message.text, 'Hello from smoke test');
-    const history = await request('/api/messages/' + encodeURIComponent(two.user.id), { token: one.token });
+    const history = await request('/api/messages/' + encodeURIComponent(two.user.id), { cookie: one.cookie });
     assert.ok(history.messages.some(item => item.text === 'Hello from smoke test'), 'message history should persist');
+    const origin = new URL(base).origin;
+    const rejectedOrigin = await fetch(base + '/api/auth/logout', {
+      method: 'POST', headers: { Origin: 'https://attacker.example' }
+    });
+    assert.equal(rejectedOrigin.status, 403, 'cross-origin state-changing request should be blocked');
+    const logout = await fetch(base + '/api/auth/logout', {
+      method: 'POST', headers: { Cookie: two.cookie, Origin: origin }
+    });
+    assert.equal(logout.status, 200);
+    const afterLogout = await fetch(base + '/api/me', { headers: { Cookie: two.cookie } });
+    assert.equal(afterLogout.status, 401, 'logout should clear the auth cookie');
   } finally {
     socketA.disconnect();
     socketB.disconnect();
   }
-  console.log('PASS: health, registration, login, search, friend request, acceptance, realtime messaging, and history.');
+  console.log('PASS: health, cookie auth, invalid credentials, search, friend requests, realtime chat, history, origin checks, and logout.');
 }
 main().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
