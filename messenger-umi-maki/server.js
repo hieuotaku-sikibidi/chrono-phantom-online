@@ -340,7 +340,7 @@ io.on('connection',async socket=>{
       return reply({ok:false,error:'Chưa gửi được lời mời gọi.'});
     }
   });
-  socket.on('call:accept', (payload, ack) => {
+  socket.on('call:accept', async (payload, ack) => {
     const reply = typeof ack === 'function' ? ack : () => {};
     const callId = payload && payload.callId;
     const own = callFor(userId, callId);
