@@ -24,7 +24,7 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - name: Test registration, friends, and real-time chat
+      - name: Test accounts, friends, realtime chat, and calls
         run: |
           set -e
           ALLOW_EPHEMERAL_DB=true JWT_SECRET=local-test-secret-umi-maki-2026-at-least-32-characters PORT=3100 node server.js > /tmp/umi-maki-server.log 2>&1 &
