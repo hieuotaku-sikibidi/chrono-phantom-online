@@ -64,6 +64,7 @@
         <button class="nav-item active" data-view="chats" type="button"><span class="nav-icon">▤</span> Tin nhắn</button>
         <button class="nav-item" data-view="friends" type="button"><span class="nav-icon">♡</span> Bạn bè</button>
         <button class="nav-item" data-view="requests" type="button"><span class="nav-icon">♧</span> Lời mời <span class="count-badge hidden" id="requestCount">0</span></button>
+        <button class="nav-item" data-view="settings" type="button"><span class="nav-icon">⚙</span> Cài đặt</button>
       </nav>
       <div class="list-heading"><span id="sidebarHeading">GẦN ĐÂY</span><button type="button" id="newChatHint" title="Tìm bạn mới">＋</button></div>
       <div class="sidebar-list" id="sidebarList"><div class="list-empty">Chưa có cuộc trò chuyện.<br>Tìm bạn để bắt đầu nhé ♡</div></div>
@@ -106,10 +107,58 @@
             <div class="form-note" id="profileNote" aria-live="polite"></div>
           </form>
         </section>
+        <section id="settingsView" class="directory-view hidden">
+          <div class="directory-heading"><div><span class="kicker">MAKE IT YOURS</span><h1>Cài đặt</h1><p>Tùy chỉnh không gian và cách bạn kết nối với bạn bè.</p></div><span class="directory-decoration">⚙</span></div>
+          <div class="settings-layout">
+            <section class="settings-card">
+              <div class="settings-card-heading"><span class="settings-icon">☼</span><div><h2>Giao diện</h2><p>Chọn giao diện phù hợp với mắt bạn. Thiết lập được lưu trên thiết bị này.</p></div></div>
+              <div class="theme-options" role="group" aria-label="Chọn giao diện">
+                <button class="theme-option" data-theme-choice="light" type="button"><span class="theme-preview light-preview"><i></i><i></i><i></i></span><strong>Giao diện sáng</strong><small>Thoáng và dịu mắt</small><span class="theme-check">✓</span></button>
+                <button class="theme-option" data-theme-choice="dark" type="button"><span class="theme-preview dark-preview"><i></i><i></i><i></i></span><strong>Giao diện tối</strong><small>Thoải mái khi ban đêm</small><span class="theme-check">✓</span></button>
+              </div>
+            </section>
+            <section class="settings-card">
+              <div class="settings-card-heading"><span class="settings-icon">♬</span><div><h2>Gọi thoại & video</h2><p>Gọi bạn bè đã kết bạn qua trình duyệt, không cần cài thêm ứng dụng.</p></div></div>
+              <div class="settings-info-row"><span class="settings-info-symbol">🎙</span><div><strong>Micrô và loa</strong><small>Trình duyệt sẽ hỏi quyền sử dụng mic khi bạn bắt đầu cuộc gọi.</small></div></div>
+              <div class="settings-info-row"><span class="settings-info-symbol">▣</span><div><strong>Camera</strong><small>Cuộc gọi video cần quyền camera. Bạn có thể tắt/bật camera và mic ngay trong cuộc gọi.</small></div></div>
+              <p class="settings-footnote">Để gọi, mở cuộc trò chuyện với bạn bè rồi chọn biểu tượng điện thoại hoặc camera. Hãy dùng HTTPS và cho phép quyền mic/camera khi trình duyệt hỏi.</p>
+            </section>
+          </div>
+        </section>
       </div>
       <footer class="app-footer"><span>Umi <i>and</i> Maki</span><span>Những người xa nhau vẫn có thể ở gần. <b>♡</b></span></footer>
     </main>
   </div>
+  <section id="callOverlay" class="call-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="callWindowTitle">
+    <div class="call-window">
+      <header class="call-window-header">
+        <div class="call-brand"><span class="call-brand-mark">u♡m</span><div><strong id="callWindowTitle">Cuộc gọi</strong><small>Umi and Maki · Gọi trực tuyến</small></div></div>
+        <button class="call-close-button" id="callCloseButton" type="button" aria-label="Đóng cuộc gọi">×</button>
+      </header>
+      <div class="call-peer">
+        <span id="callPeerAvatar" class="avatar call-peer-avatar">♡</span>
+        <div><strong id="callPeerName">Bạn bè</strong><small id="callStatus">Đang kết nối…</small></div>
+      </div>
+      <div id="incomingCallPanel" class="incoming-call-panel hidden">
+        <div class="incoming-call-orbit">♫</div>
+        <h2 id="incomingCallTitle">Cuộc gọi đến</h2>
+        <p id="incomingCallDescription">Bạn bè đang gọi cho bạn.</p>
+        <div class="incoming-call-actions"><button class="call-action-button accept-call" id="acceptCallButton" type="button"><span>☎</span> Nghe máy</button><button class="call-action-button decline-call" id="declineCallButton" type="button"><span>×</span> Từ chối</button></div>
+      </div>
+      <div id="activeCallPanel" class="active-call-panel">
+        <div id="voiceCallArtwork" class="voice-call-artwork"><span class="voice-ring"></span><span class="voice-ring ring-two"></span><span id="voiceCallAvatar" class="avatar voice-call-avatar">♡</span><p>Đang ở cùng nhau, dù cách xa nhau.</p></div>
+        <video id="remoteVideo" class="remote-video hidden" autoplay playsinline></video>
+        <video id="localVideo" class="local-video hidden" autoplay playsinline muted></video>
+        <audio id="remoteAudio" autoplay></audio>
+      </div>
+      <div id="callControls" class="call-controls">
+        <button class="round-call-control" id="callMicButton" type="button"><span>🎙</span><small>Tắt mic</small></button>
+        <button class="round-call-control camera-control hidden" id="callCameraButton" type="button"><span>▣</span><small>Tắt cam</small></button>
+        <button class="round-call-control end-call-control" id="endCallButton" type="button"><span>☎</span><small>Kết thúc</small></button>
+      </div>
+      <p class="call-security-note">Chỉ gọi được với bạn bè đã chấp nhận kết bạn. Mic và camera có thể tắt bất cứ lúc nào.</p>
+    </div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
