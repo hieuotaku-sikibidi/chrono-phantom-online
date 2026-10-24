@@ -67,7 +67,25 @@ app.use('/api', (req, res, next) => {
   next();
 });
 const activeSockets = new Map();
+const activeCalls = new Map();
 const roomFor = id => 'user:' + id;
+function validUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+function callFor(userId, callId) {
+  const call = activeCalls.get(userId);
+  return call && call.callId === callId ? call : null;
+}
+function closeCall(userId, callId, eventName, extra = {}) {
+  const call = callFor(userId, callId);
+  if (!call) return false;
+  const peerId = call.peerId;
+  activeCalls.delete(userId);
+  const peerCall = callFor(peerId, callId);
+  if (peerCall) activeCalls.delete(peerId);
+  io.to(roomFor(peerId)).emit(eventName, { callId, from: userId, ...extra });
+  return true;
+}
 const sql = (text, values = []) => pool.query(text, values);
 const normalizedPair = (a,b) => a.localeCompare(b) < 0 ? [a,b] : [b,a];
 
@@ -299,6 +317,73 @@ io.on('connection',async socket=>{
   if(activeSockets.get(userId)===1) await sendPresence(userId,true).catch(()=>{});
   socket.emit('presence:initial',[...activeSockets.keys()].filter(id=>id!==userId));
   socket.on('presence:list',()=>socket.emit('presence:initial',[...activeSockets.keys()].filter(id=>id!==userId)));
+  socket.on('call:invite', async (payload, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    try {
+      const to = payload && payload.to;
+      const callId = payload && payload.callId;
+      const mode = payload && payload.mode;
+      if (!validUuid(to) || to === userId || !validUuid(callId) || !['audio','video'].includes(mode)) {
+        return reply({ok:false,error:'Thông tin cuộc gọi không hợp lệ.'});
+      }
+      if (!await areFriends(userId, to)) return reply({ok:false,error:'Chỉ có thể gọi người đã kết bạn.'});
+      if (!(activeSockets.get(to) > 0)) return reply({ok:false,error:'Người này hiện không trực tuyến.'});
+      if (activeCalls.has(userId) || activeCalls.has(to)) return reply({ok:false,error:'Một trong hai người đang có cuộc gọi khác.'});
+      const caller = await getUser(userId);
+      if (!caller) return reply({ok:false,error:'Không tìm thấy tài khoản gọi.'});
+      activeCalls.set(userId, {callId, peerId:to, mode, status:'ringing'});
+      activeCalls.set(to, {callId, peerId:userId, mode, status:'ringing'});
+      io.to(roomFor(to)).emit('call:incoming', {callId, mode, caller});
+      return reply({ok:true});
+    } catch (error) {
+      console.error('call:invite failed:', error && error.code ? error.code : 'UnknownError');
+      return reply({ok:false,error:'Chưa gửi được lời mời gọi.'});
+    }
+  });
+  socket.on('call:accept', (payload, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const callId = payload && payload.callId;
+    const own = callFor(userId, callId);
+    if (!own || own.status !== 'ringing') return reply({ok:false,error:'Cuộc gọi không còn khả dụng.'});
+    own.status = 'connecting';
+    const peer = callFor(own.peerId, callId);
+    if (!peer) { closeCall(userId, callId, 'call:ended', {reason:'missing'}); return reply({ok:false,error:'Người gọi đã rời cuộc gọi.'}); }
+    peer.status = 'connecting';
+    io.to(roomFor(own.peerId)).emit('call:accepted', {callId, peer: await getUser(userId).catch(() => null)});
+    return reply({ok:true});
+  });
+  socket.on('call:signal', (payload, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const callId = payload && payload.callId;
+    const to = payload && payload.to;
+    const kind = payload && payload.kind;
+    const own = callFor(userId, callId);
+    if (!own || own.peerId !== to || !callFor(to, callId)) return reply({ok:false,error:'Không tìm thấy cuộc gọi đang hoạt động.'});
+    if (kind === 'offer' || kind === 'answer') {
+      const description = payload && payload.description;
+      if (!description || !['offer','answer'].includes(description.type) || typeof description.sdp !== 'string' || description.sdp.length > 50000) {
+        return reply({ok:false,error:'Thông tin kết nối không hợp lệ.'});
+      }
+      io.to(roomFor(to)).emit('call:signal', {callId, from:userId, kind, description});
+      return reply({ok:true});
+    }
+    if (kind === 'ice') {
+      const candidate = payload && payload.candidate;
+      if (!candidate || typeof candidate.candidate !== 'string' || candidate.candidate.length > 2048) return reply({ok:false,error:'Thông tin mạng không hợp lệ.'});
+      io.to(roomFor(to)).emit('call:signal', {callId, from:userId, kind, candidate});
+      return reply({ok:true});
+    }
+    return reply({ok:false,error:'Loại tín hiệu cuộc gọi không hợp lệ.'});
+  });
+  socket.on('call:decline', (payload) => {
+    const callId = payload && payload.callId;
+    const reason = payload && typeof payload.reason === 'string' ? payload.reason.slice(0,40) : 'declined';
+    closeCall(userId, callId, 'call:declined', {reason});
+  });
+  socket.on('call:end', (payload) => {
+    const callId = payload && payload.callId;
+    closeCall(userId, callId, 'call:ended', {reason:'hangup'});
+  });
   const messageTimestamps = [];
   socket.on('message:send',async(payload,ack)=>{
     const reply=typeof ack==='function'?ack:()=>{};
@@ -317,6 +402,8 @@ io.on('connection',async socket=>{
     } catch(e) { console.error('message:send failed:',e.message); reply({ok:false,error:'Chưa gửi được tin nhắn. Thử lại nhé.'}); }
   });
   socket.on('disconnect',async()=>{
+    const activeCall = activeCalls.get(userId);
+    if (activeCall) closeCall(userId, activeCall.callId, 'call:ended', {reason:'disconnected'});
     const count=Math.max(0,(activeSockets.get(userId)||1)-1);
     if(!count) { activeSockets.delete(userId); await sendPresence(userId,false).catch(()=>{}); } else activeSockets.set(userId,count);
   });
