@@ -14,6 +14,8 @@ const { Server } = require('socket.io');
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
+const AUTH_COOKIE = 'umi_auth';
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 12);
 if (!JWT_SECRET || JWT_SECRET.length < 32) { console.error('JWT_SECRET must be at least 32 characters'); process.exit(1); }
 
 let pool;
@@ -31,13 +33,39 @@ if (DATABASE_URL) {
 }
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e6 });
+const io = new Server(server, {
+  maxHttpBufferSize: 64 * 1024,
+  allowRequest: (req, callback) => {
+    const origin = req.headers.origin;
+    if (!origin) return callback(null, true);
+    try {
+      const parsed = new URL(origin);
+      if (parsed.host === req.headers.host && (parsed.protocol === 'https:' || parsed.protocol === 'http:')) return callback(null, true);
+    } catch {}
+    return callback('Origin not allowed', false);
+  }
+});
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:'], connectSrc: ["'self'", 'ws:', 'wss:'], fontSrc: ["'self'", 'data:'], objectSrc: ["'none'"], baseUri: ["'self'"], frameAncestors: ["'none'"] } }, crossOriginEmbedderPolicy: false }));
-app.use(express.json({ limit: '1mb' }));
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+app.use(express.json({ limit: '750kb' }));
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.get('origin')) {
+    try {
+      const origin = new URL(req.get('origin'));
+      if (origin.host !== req.get('host') || !['https:', 'http:'].includes(origin.protocol)) {
+        return res.status(403).json({ error: 'Nguồn yêu cầu không hợp lệ.' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Nguồn yêu cầu không hợp lệ.' });
+    }
+  }
+  next();
+});
 const activeSockets = new Map();
 const roomFor = id => 'user:' + id;
 const sql = (text, values = []) => pool.query(text, values);
@@ -47,13 +75,42 @@ async function initDb() {
   await sql("CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), public_id VARCHAR(16) UNIQUE NOT NULL, username VARCHAR(24) UNIQUE NOT NULL, display_name VARCHAR(32) NOT NULL, bio VARCHAR(180) NOT NULL DEFAULT '', avatar TEXT, password_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS friendships (user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, requested_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, status VARCHAR(12) NOT NULL CHECK (status IN ('pending','accepted')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(user_a,user_b), CHECK(user_a < user_b), CHECK(requested_by=user_a OR requested_by=user_b)); CREATE TABLE IF NOT EXISTS messages (id BIGSERIAL PRIMARY KEY, sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, text VARCHAR(2000) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), CHECK(sender_id<>recipient_id)); CREATE INDEX IF NOT EXISTS idx_friendships_a_status ON friendships(user_a,status); CREATE INDEX IF NOT EXISTS idx_friendships_b_status ON friendships(user_b,status); CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id,recipient_id,created_at DESC); CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender_time ON messages(recipient_id,sender_id,created_at DESC)");
 }
 function safeUser(row) { return row ? { id: row.id, publicId: row.public_id, username: row.username, displayName: row.display_name, bio: row.bio || '', avatar: row.avatar || null, createdAt: row.created_at } : null; }
-function tokenFor(user) { return jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '7d', issuer: 'umi-maki-messenger' }); }
+function readCookie(header, name) {
+  for (const item of String(header || '').split(';')) {
+    const index = item.indexOf('=');
+    if (index < 0 || item.slice(0, index).trim() !== name) continue;
+    try { return decodeURIComponent(item.slice(index + 1).trim()); } catch { return ''; }
+  }
+  return '';
+}
+function authCookie(token, maxAge = 604800) {
+  const parts = [AUTH_COOKIE + '=' + encodeURIComponent(token), 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=' + maxAge];
+  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  return parts.join('; ');
+}
+function tokenFor(user) {
+  return jwt.sign({ sub: user.id }, JWT_SECRET, {
+    algorithm: 'HS256', expiresIn: '7d', issuer: 'umi-maki-messenger', audience: 'umi-maki-web'
+  });
+}
+function verifiedPayload(token) {
+  return jwt.verify(token, JWT_SECRET, {
+    algorithms: ['HS256'], issuer: 'umi-maki-messenger', audience: 'umi-maki-web'
+  });
+}
 function auth(req,res,next) {
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const token = bearer || readCookie(req.headers.cookie, AUTH_COOKIE);
   if (!token) return res.status(401).json({ error: 'Bạn cần đăng nhập để tiếp tục.' });
-  try { req.userId = jwt.verify(token, JWT_SECRET, { issuer: 'umi-maki-messenger' }).sub; return next(); }
-  catch { return res.status(401).json({ error: 'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.' }); }
+  try {
+    const payload = verifiedPayload(token);
+    if (typeof payload.sub !== 'string') throw new Error('Invalid subject');
+    req.userId = payload.sub;
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.' });
+  }
 }
 const route = fn => (req,res,next) => Promise.resolve(fn(req,res,next)).catch(next);
 async function getUser(id) { const r = await sql('SELECT id,public_id,username,display_name,bio,avatar,created_at FROM users WHERE id=$1',[id]); return safeUser(r.rows[0]); }
@@ -74,7 +131,7 @@ async function sendPresence(userId,online) {
 
 
 app.get('/api/health',(_req,res) => res.json({ok:true,service:'Messenger Umi and Maki'}));
-app.post('/api/auth/register',authLimiter,route(async(req,res) => {
+app.post('/api/auth/register',registerLimiter,route(async(req,res) => {
   const displayName = typeof req.body.displayName === 'string' ? req.body.displayName.trim() : '';
   const username = typeof req.body.username === 'string' ? req.body.username.trim().replace(/^@/,'').toLowerCase() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
@@ -96,17 +153,25 @@ app.post('/api/auth/register',authLimiter,route(async(req,res) => {
   }
   if (!row) return res.status(500).json({error:'Chưa tạo được tài khoản. Thử lại nhé.'});
   const user = safeUser(row);
-  return res.status(201).json({token:tokenFor(user),user});
+  res.setHeader('Set-Cookie', authCookie(tokenFor(user)));
+  return res.status(201).json({user});
 }));
 app.post('/api/auth/login',authLimiter,route(async(req,res) => {
   const identifier = typeof req.body.identifier === 'string' ? req.body.identifier.trim().replace(/^@/,'').toLowerCase() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
   if (!identifier || !password) return res.status(400).json({error:'Nhập username hoặc ID cùng mật khẩu.'});
   const r = await sql('SELECT id,public_id,username,display_name,bio,avatar,password_hash,created_at FROM users WHERE LOWER(username)=$1 OR LOWER(public_id)=$1 LIMIT 1',[identifier]);
-  if (!r.rowCount || !(await bcrypt.compare(password,r.rows[0].password_hash))) return res.status(401).json({error:'Tên đăng nhập/ID hoặc mật khẩu chưa đúng.'});
+  const candidateHash = r.rowCount ? r.rows[0].password_hash : DUMMY_PASSWORD_HASH;
+  const passwordMatches = await bcrypt.compare(password, candidateHash);
+  if (!r.rowCount || !passwordMatches) return res.status(401).json({error:'Tên đăng nhập/ID hoặc mật khẩu chưa đúng.'});
   const user = safeUser(r.rows[0]);
-  return res.json({token:tokenFor(user),user});
+  res.setHeader('Set-Cookie', authCookie(tokenFor(user)));
+  return res.json({user});
 }));
+app.post('/api/auth/logout', (_req,res) => {
+  res.setHeader('Set-Cookie', authCookie('', 0));
+  return res.json({ok:true});
+});
 app.get('/api/me',auth,route(async(req,res) => { const user = await getUser(req.userId); return user ? res.json({user}) : res.status(404).json({error:'Không tìm thấy tài khoản.'}); }));
 app.patch('/api/me',auth,route(async(req,res) => {
   const old = await getUser(req.userId);
@@ -120,7 +185,9 @@ app.patch('/api/me',auth,route(async(req,res) => {
   const r = await sql('UPDATE users SET display_name=$1,bio=$2,avatar=$3,updated_at=NOW() WHERE id=$4 RETURNING id,public_id,username,display_name,bio,avatar,created_at',[displayName,bio,avatar || null,req.userId]);
   const user = safeUser(r.rows[0]);
   io.to(roomFor(req.userId)).emit('profile:refresh',{user});
-  await refreshFriends([req.userId]);
+  const links = await sql("SELECT user_a,user_b FROM friendships WHERE (user_a=$1 OR user_b=$1) AND status='accepted'", [req.userId]);
+  const affected = [req.userId, ...links.rows.map(row => row.user_a === req.userId ? row.user_b : row.user_a)];
+  await refreshFriends(affected);
   return res.json({user});
 }));
 app.get('/api/users/search',auth,route(async(req,res) => {
@@ -219,9 +286,10 @@ app.get('*',(_req,res)=>res.sendFile(path.join(__dirname,'public','index.html'))
 
 io.use(async(socket,next)=>{
   try {
-    const token=socket.handshake.auth&&socket.handshake.auth.token;
+    const authToken=socket.handshake.auth&&socket.handshake.auth.token;
+    const token=authToken || readCookie(socket.handshake.headers.cookie, AUTH_COOKIE);
     if(!token) return next(new Error('UNAUTHORIZED'));
-    const payload=jwt.verify(token,JWT_SECRET,{issuer:'umi-maki-messenger'});
+    const payload=verifiedPayload(token);
     if(!(await getUser(payload.sub))) return next(new Error('UNAUTHORIZED'));
     socket.userId=payload.sub; return next();
   } catch { return next(new Error('UNAUTHORIZED')); }
@@ -231,12 +299,17 @@ io.on('connection',async socket=>{
   if(activeSockets.get(userId)===1) await sendPresence(userId,true).catch(()=>{});
   socket.emit('presence:initial',[...activeSockets.keys()].filter(id=>id!==userId));
   socket.on('presence:list',()=>socket.emit('presence:initial',[...activeSockets.keys()].filter(id=>id!==userId)));
+  const messageTimestamps = [];
   socket.on('message:send',async(payload,ack)=>{
     const reply=typeof ack==='function'?ack:()=>{};
+    const now = Date.now();
+    while (messageTimestamps.length && now - messageTimestamps[0] > 10000) messageTimestamps.shift();
+    if (messageTimestamps.length >= 20) return reply({ok:false,error:'Bạn đang gửi quá nhanh. Hãy chờ một chút nhé.'});
+    messageTimestamps.push(now);
     try {
       const to=payload&&typeof payload.to==='string'?payload.to:'';
       const text=payload&&typeof payload.text==='string'?payload.text.trim():'';
-      if(!to||text.length<1||text.length>2000) return reply({ok:false,error:'Tin nhắn cần có nội dung và tối đa 2000 ký tự.'});
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(to)||text.length<1||text.length>2000) return reply({ok:false,error:'Tin nhắn cần có nội dung hợp lệ và tối đa 2000 ký tự.'});
       if(!(await areFriends(userId,to))) return reply({ok:false,error:'Hai bạn cần kết bạn trước khi nhắn tin.'});
       const r=await sql('INSERT INTO messages(sender_id,recipient_id,text) VALUES($1,$2,$3) RETURNING id,sender_id,recipient_id,text,created_at',[userId,to,text]);
       const row=r.rows[0]; const message={id:String(row.id),senderId:row.sender_id,recipientId:row.recipient_id,text:row.text,createdAt:row.created_at};
@@ -250,7 +323,7 @@ io.on('connection',async socket=>{
 });
 app.use((err,_req,res,_next)=>{
   if(err&&err.type==='entity.too.large') return res.status(413).json({error:'Dữ liệu gửi lên quá lớn.'});
-  console.error('Request error:',err&&err.message?err.message:err);
+  console.error('Request error:', err && err.code ? err.code : (err && err.name ? err.name : 'UnknownError'));
   return res.status(500).json({error:'Máy chủ gặp lỗi. Hãy thử lại sau.'});
 });
 initDb().then(()=>server.listen(PORT,'0.0.0.0',()=>console.log('Messenger Umi and Maki listening on port '+PORT))).catch(err=>{console.error('Database initialization failed:',err.message);process.exit(1);});
