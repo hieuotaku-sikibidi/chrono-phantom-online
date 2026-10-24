@@ -78,6 +78,9 @@
     if (typeof window.io !== 'function') { toast('Không tải được kết nối thời gian thực. Hãy tải lại trang.', true); return; }
     state.socket = window.io({ withCredentials: true, reconnection: true });
     state.socket.on('connect_error', () => { toast('Không kết nối được máy chủ realtime.', true); });
+    state.socket.on('disconnect', () => {
+      if (state.call) cleanupCall();
+    });
     installCallSocketHandlers(state.socket);
     state.socket.on('presence:initial', ids => { state.online = new Set(ids || []); renderSidebar(); if (state.selected) renderChatHeader(); });
     state.socket.on('presence:update', data => {
