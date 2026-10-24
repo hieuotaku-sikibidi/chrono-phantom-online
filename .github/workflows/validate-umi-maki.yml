@@ -1,0 +1,26 @@
+name: Validate Umi and Maki Messenger
+on:
+  push:
+    branches: [umi-maki-messenger]
+    paths:
+      - "messenger-umi-maki/**"
+      - "render.yaml"
+      - ".github/workflows/validate-umi-maki.yml"
+  pull_request:
+    branches: [umi-maki-messenger]
+    paths:
+      - "messenger-umi-maki/**"
+      - "render.yaml"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: messenger-umi-maki
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
