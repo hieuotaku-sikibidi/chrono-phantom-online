@@ -357,7 +357,6 @@
   });
 
   async function boot() {
-    if (!state.token) { showAuth('login'); return; }
     try {
       const data=await api('/api/me'); state.me=data.user;
       $('#authScreen').classList.add('hidden'); $('#appScreen').classList.remove('hidden');
