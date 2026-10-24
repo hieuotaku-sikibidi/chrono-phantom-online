@@ -82,7 +82,7 @@ app.post('/api/auth/register',authLimiter,route(async(req,res) => {
   for (let i=0;i<5;i++) {
     const publicId = 'UM-' + crypto.randomBytes(4).toString('hex').toUpperCase();
     try {
-      const r = await sql('INSERT INTO users(public_id,username,display_name,password_hash) VALUES($1,$2,$3,$4) RETURNING id,public_id,username,display_name,bio,avatar,created_at',[publicId,username,displayName,passwordHash]);
+      const r = await sql('INSERT INTO users(id,public_id,username,display_name,password_hash) VALUES($1,$2,$3,$4,$5) RETURNING id,public_id,username,display_name,bio,avatar,created_at',[crypto.randomUUID(),publicId,username,displayName,passwordHash]);
       row = r.rows[0]; break;
     } catch(e) {
       if (e.code === '23505' && String(e.constraint || '').includes('username')) return res.status(409).json({error:'Username đã được sử dụng. Hãy chọn tên khác.'});
