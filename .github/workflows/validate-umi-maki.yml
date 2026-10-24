@@ -24,3 +24,16 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run check
+      - name: Test registration, friends, and real-time chat
+        run: |
+          set -e
+          ALLOW_EPHEMERAL_DB=true JWT_SECRET=local-test-secret-umi-maki-2026-at-least-32-characters PORT=3100 node server.js > /tmp/umi-maki-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          READY=0
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/api/health >/dev/null; then READY=1; break; fi
+            sleep 1
+          done
+          if [ "$READY" != "1" ]; then cat /tmp/umi-maki-server.log; exit 1; fi
+          node scripts/smoke-test.js
