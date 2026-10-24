@@ -7,6 +7,21 @@
   <meta name="description" content="Messenger Umi and Maki — kết bạn bằng ID, tạo hồ sơ và trò chuyện trực tuyến.">
   <title>Messenger Umi and Maki</title>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    .sound-settings-card { grid-column: 1 / -1; }
+    .sound-options { display: grid; gap: 18px; margin-top: 18px; }
+    .sound-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 16px; border: 1px solid rgba(126, 105, 218, .22); border-radius: 14px; background: rgba(126, 105, 218, .055); cursor: pointer; }
+    .sound-setting-copy { display: grid; gap: 5px; }
+    .sound-setting-copy strong, .sound-volume-row label { font-size: 14px; font-weight: 650; }
+    .sound-setting-copy small, .sound-hint { color: var(--muted, #777); font-size: 12px; line-height: 1.55; }
+    .sound-toggle-control { display: flex; align-items: center; gap: 9px; flex-shrink: 0; color: var(--muted, #777); font-size: 12px; }
+    #soundEnabledToggle { width: 19px; height: 19px; accent-color: #7966e8; cursor: pointer; }
+    .sound-volume-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 0 2px; }
+    #soundVolumeValue { color: var(--muted, #777); font-size: 12px; font-variant-numeric: tabular-nums; }
+    #soundVolumeSlider { grid-column: 1 / -1; width: 100%; accent-color: #7966e8; cursor: pointer; }
+    .sound-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+    @media (max-width: 760px) { .sound-settings-card { grid-column: auto; } }
+  </style>
   <script src="/socket.io/socket.io.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
@@ -115,6 +130,20 @@
               <div class="theme-options" role="group" aria-label="Chọn giao diện">
                 <button class="theme-option" data-theme-choice="light" type="button"><span class="theme-preview light-preview"><i></i><i></i><i></i></span><strong>Giao diện sáng</strong><small>Thoáng và dịu mắt</small><span class="theme-check">✓</span></button>
                 <button class="theme-option" data-theme-choice="dark" type="button"><span class="theme-preview dark-preview"><i></i><i></i><i></i></span><strong>Giao diện tối</strong><small>Thoải mái khi ban đêm</small><span class="theme-check">✓</span></button>
+              </div>
+            </section>
+            <section class="settings-card sound-settings-card">
+              <div class="settings-card-heading"><span class="settings-icon">♫</span><div><h2>Âm thanh & thông báo</h2><p>Âm thanh nhỏ cho tin nhắn, lời mời kết bạn và cuộc gọi đến. Mọi tùy chọn được lưu trên thiết bị này.</p></div></div>
+              <div class="sound-options">
+                <label class="sound-toggle-row" for="soundEnabledToggle">
+                  <span class="sound-setting-copy"><strong>Hiệu ứng âm thanh</strong><small>Bật tiếng gửi/nhận tin nhắn, thông báo và nhạc chuông cuộc gọi.</small></span>
+                  <span class="sound-toggle-control"><span id="soundStatusLabel">Đang bật</span><input id="soundEnabledToggle" type="checkbox" checked></span>
+                </label>
+                <div class="sound-volume-row">
+                  <label for="soundVolumeSlider">Âm lượng</label><output id="soundVolumeValue" for="soundVolumeSlider">55%</output>
+                  <input id="soundVolumeSlider" type="range" min="0" max="100" step="5" value="55">
+                </div>
+                <div class="sound-action-row"><button class="secondary-btn" id="soundTestButton" type="button">♫ Nghe thử âm thanh</button><span class="sound-hint">Mẹo: trình duyệt cần một lần tương tác để cho phép phát âm thanh.</span></div>
               </div>
             </section>
             <section class="settings-card">
