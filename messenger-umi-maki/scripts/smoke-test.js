@@ -97,6 +97,41 @@ async function main() {
     assert.equal(message.text, 'Hello from smoke test');
     const history = await request('/api/messages/' + encodeURIComponent(two.user.id), { cookie: one.cookie });
     assert.ok(history.messages.some(item => item.text === 'Hello from smoke test'), 'message history should persist');
+    const callId = require('node:crypto').randomUUID();
+    const incomingCall = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for incoming call')), 8000);
+      socketB.once('call:incoming', call => { clearTimeout(timer); resolve(call); });
+    });
+    const inviteAck = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Call invite ack timed out')), 8000);
+      socketA.emit('call:invite', { to: two.user.id, callId, mode: 'video' }, response => {
+        clearTimeout(timer);
+        if (!response || !response.ok) return reject(new Error((response && response.error) || 'Call invite failed'));
+        resolve(response);
+      });
+    });
+    const callResults = await Promise.all([incomingCall, inviteAck]);
+    assert.equal(callResults[0].callId, callId);
+    assert.equal(callResults[0].mode, 'video');
+    const accepted = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Call accept signal timed out')), 8000);
+      socketA.once('call:accepted', payload => { clearTimeout(timer); resolve(payload); });
+    });
+    socketB.emit('call:accept', { callId }, response => { if (!response || !response.ok) console.error('accept call failed', response); });
+    assert.equal((await accepted).callId, callId);
+    const relayedOffer = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Call offer was not relayed')), 8000);
+      socketB.once('call:signal', signal => { clearTimeout(timer); resolve(signal); });
+    });
+    socketA.emit('call:signal', { to: two.user.id, callId, kind: 'offer', description: { type: 'offer', sdp: 'smoke-test-sdp' } }, response => {
+      if (!response || !response.ok) console.error('call signaling failed', response);
+    });
+    const relayed = await relayedOffer;
+    assert.equal(relayed.kind, 'offer');
+    assert.equal(relayed.from, one.user.id);
+    const ended = new Promise(resolve => socketB.once('call:ended', resolve));
+    socketA.emit('call:end', { callId });
+    assert.equal((await ended).reason, 'hangup');
     const origin = new URL(base).origin;
     const rejectedOrigin = await fetch(base + '/api/auth/logout', {
       method: 'POST', headers: { Origin: 'https://attacker.example' }
@@ -111,6 +146,6 @@ async function main() {
     socketA.disconnect();
     socketB.disconnect();
   }
-  console.log('PASS: health, cookie auth, invalid credentials, search, friend requests, realtime chat, history, origin checks, and logout.');
+  console.log('PASS: auth, friend management, realtime chat, call invite/accept/signaling/end, origin checks, and logout.');
 }
 main().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
