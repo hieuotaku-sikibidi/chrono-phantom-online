@@ -65,9 +65,13 @@ async function areFriends(a,b) {
 }
 async function refreshFriends(ids) { for (const id of new Set(ids.filter(Boolean))) io.to(roomFor(id)).emit('friends:refresh'); }
 async function sendPresence(userId,online) {
-  const r = await sql("SELECT CASE WHEN user_a=$1 THEN user_b ELSE user_a END AS other_id FROM friendships WHERE (user_a=$1 OR user_b=$1) AND status='accepted'",[userId]);
-  for (const row of r.rows) io.to(roomFor(row.other_id)).emit('presence:update',{userId,online});
+  const r = await sql("SELECT user_a,user_b FROM friendships WHERE (user_a=$1 OR user_b=$1) AND status='accepted'", [userId]);
+  for (const row of r.rows) {
+    const otherId = row.user_a === userId ? row.user_b : row.user_a;
+    io.to(roomFor(otherId)).emit('presence:update', { userId, online });
+  }
 }
+
 
 app.get('/api/health',(_req,res) => res.json({ok:true,service:'Messenger Umi and Maki'}));
 app.post('/api/auth/register',authLimiter,route(async(req,res) => {
@@ -123,19 +127,52 @@ app.get('/api/users/search',auth,route(async(req,res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().replace(/^@/,'') : '';
   if (q.length < 2) return res.json({users:[]});
   if (q.length > 64) return res.status(400).json({error:'Từ khóa tìm kiếm quá dài.'});
-  const r = await sql("SELECT u.id,u.public_id,u.username,u.display_name,u.bio,u.avatar,u.created_at,CASE WHEN f.status='accepted' THEN 'friend' WHEN f.status='pending' AND f.requested_by=$1 THEN 'outgoing' WHEN f.status='pending' THEN 'incoming' ELSE 'none' END AS relationship FROM users u LEFT JOIN friendships f ON f.user_a=LEAST(u.id,$1::uuid) AND f.user_b=GREATEST(u.id,$1::uuid) WHERE u.id<>$1 AND (LOWER(u.public_id)=LOWER($2) OR u.username ILIKE $3 OR u.display_name ILIKE $3) ORDER BY CASE WHEN LOWER(u.public_id)=LOWER($2) THEN 0 WHEN u.username=LOWER($2) THEN 1 ELSE 2 END,u.display_name LIMIT 25",[req.userId,q,'%'+q+'%']);
-  return res.json({users:r.rows.map(row=>({...safeUser(row),relationship:row.relationship}))});
+  const r = await sql("SELECT id,public_id,username,display_name,bio,avatar,created_at FROM users WHERE id<>$1 AND (LOWER(public_id)=LOWER($2) OR username ILIKE $3 OR display_name ILIKE $3) ORDER BY display_name LIMIT 25", [req.userId,q,'%'+q+'%']);
+  const users = await Promise.all(r.rows.map(async row => {
+    const [low,high] = normalizedPair(req.userId,row.id);
+    const fr = await sql('SELECT status,requested_by FROM friendships WHERE user_a=$1 AND user_b=$2 LIMIT 1', [low,high]);
+    let relationship = 'none';
+    if (fr.rowCount && fr.rows[0].status === 'accepted') relationship = 'friend';
+    else if (fr.rowCount && fr.rows[0].requested_by === req.userId) relationship = 'outgoing';
+    else if (fr.rowCount) relationship = 'incoming';
+    return { ...safeUser(row), relationship };
+  }));
+  users.sort((a,b) => {
+    const rank = user => user.publicId.toLowerCase() === q.toLowerCase() ? 0 : user.username.toLowerCase() === q.toLowerCase() ? 1 : 2;
+    return rank(a)-rank(b) || a.displayName.localeCompare(b.displayName);
+  });
+  return res.json({users});
 }));
+
+
 app.get('/api/friends',auth,route(async(req,res) => {
-  const r = await sql("SELECT u.id,u.public_id,u.username,u.display_name,u.bio,u.avatar,u.created_at,m.text AS last_message FROM friendships f JOIN users u ON u.id=CASE WHEN f.user_a=$1 THEN f.user_b ELSE f.user_a END LEFT JOIN LATERAL (SELECT text,created_at FROM messages WHERE (sender_id=$1 AND recipient_id=u.id) OR (sender_id=u.id AND recipient_id=$1) ORDER BY created_at DESC LIMIT 1) m ON TRUE WHERE (f.user_a=$1 OR f.user_b=$1) AND f.status='accepted' ORDER BY COALESCE(m.created_at,f.updated_at) DESC,u.display_name ASC",[req.userId]);
-  return res.json({friends:r.rows.map(row=>({...safeUser(row),online:(activeSockets.get(row.id)||0)>0,lastMessage:row.last_message||''}))});
+  const r = await sql("SELECT user_a,user_b,updated_at FROM friendships WHERE (user_a=$1 OR user_b=$1) AND status='accepted'", [req.userId]);
+  const friends = await Promise.all(r.rows.map(async row => {
+    const id = row.user_a === req.userId ? row.user_b : row.user_a;
+    const user = await getUser(id);
+    if (!user) return null;
+    const message = await sql("SELECT text,created_at FROM messages WHERE (sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1) ORDER BY created_at DESC LIMIT 1", [req.userId,id]);
+    return { ...user, online:(activeSockets.get(id)||0)>0, lastMessage:message.rowCount?message.rows[0].text:'', lastMessageAt:message.rowCount?message.rows[0].created_at:row.updated_at };
+  }));
+  friends.sort((a,b)=>new Date(b.lastMessageAt)-new Date(a.lastMessageAt));
+  return res.json({friends:friends.filter(Boolean)});
 }));
+
+
 app.get('/api/friends/requests',auth,route(async(req,res) => {
-  const r = await sql("SELECT f.requested_by,f.created_at AS requested_at,u.id,u.public_id,u.username,u.display_name,u.bio,u.avatar,u.created_at FROM friendships f JOIN users u ON u.id=CASE WHEN f.user_a=$1 THEN f.user_b ELSE f.user_a END WHERE (f.user_a=$1 OR f.user_b=$1) AND f.status='pending' ORDER BY f.created_at DESC",[req.userId]);
+  const r = await sql("SELECT user_a,user_b,requested_by,created_at AS requested_at FROM friendships WHERE (user_a=$1 OR user_b=$1) AND status='pending' ORDER BY created_at DESC", [req.userId]);
   const incoming=[],outgoing=[];
-  for (const row of r.rows) { const user={...safeUser(row),requestedAt:row.requested_at}; (row.requested_by===req.userId?outgoing:incoming).push(user); }
+  for (const row of r.rows) {
+    const otherId = row.user_a === req.userId ? row.user_b : row.user_a;
+    const user = await getUser(otherId);
+    if (!user) continue;
+    const item = { ...user, requestedAt:row.requested_at };
+    (row.requested_by === req.userId ? outgoing : incoming).push(item);
+  }
   return res.json({incoming,outgoing});
 }));
+
+
 app.post('/api/friends/request',auth,route(async(req,res) => {
   const targetId = typeof req.body.userId === 'string' ? req.body.userId : '';
   if (!targetId || targetId===req.userId) return res.status(400).json({error:'ID người dùng không hợp lệ.'});
@@ -145,7 +182,7 @@ app.post('/api/friends/request',auth,route(async(req,res) => {
   let status='pending';
   try {
     await client.query('BEGIN');
-    const old=await client.query('SELECT status,requested_by FROM friendships WHERE user_a=$1 AND user_b=$2 FOR UPDATE',[a,b]);
+    const old=await client.query('SELECT status,requested_by FROM friendships WHERE user_a=$1 AND user_b=$2',[a,b]);
     if (old.rowCount && old.rows[0].status==='accepted') { await client.query('ROLLBACK'); return res.status(409).json({error:'Hai bạn đã là bạn bè.'}); }
     if (old.rowCount && old.rows[0].status==='pending' && old.rows[0].requested_by!==req.userId) {
       await client.query("UPDATE friendships SET status='accepted',updated_at=NOW() WHERE user_a=$1 AND user_b=$2",[a,b]); status='accepted';
