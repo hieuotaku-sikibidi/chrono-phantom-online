@@ -68,6 +68,7 @@ app.use('/api', (req, res, next) => {
 });
 const activeSockets = new Map();
 const activeCalls = new Map();
+const callTimers = new Map();
 const roomFor = id => 'user:' + id;
 function validUuid(value) {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -79,6 +80,9 @@ function callFor(userId, callId) {
 function closeCall(userId, callId, eventName, extra = {}) {
   const call = callFor(userId, callId);
   if (!call) return false;
+  const timer = callTimers.get(callId);
+  if (timer) clearTimeout(timer);
+  callTimers.delete(callId);
   const peerId = call.peerId;
   activeCalls.delete(userId);
   const peerCall = callFor(peerId, callId);
@@ -331,8 +335,19 @@ io.on('connection',async socket=>{
       if (activeCalls.has(userId) || activeCalls.has(to)) return reply({ok:false,error:'Một trong hai người đang có cuộc gọi khác.'});
       const caller = await getUser(userId);
       if (!caller) return reply({ok:false,error:'Không tìm thấy tài khoản gọi.'});
-      activeCalls.set(userId, {callId, peerId:to, mode, status:'ringing'});
-      activeCalls.set(to, {callId, peerId:userId, mode, status:'ringing'});
+      activeCalls.set(userId, {callId, peerId:to, mode, status:'ringing', isCaller:true});
+      activeCalls.set(to, {callId, peerId:userId, mode, status:'ringing', isCaller:false});
+      const timer = setTimeout(() => {
+        const current = callFor(userId, callId);
+        if (!current || current.status !== 'ringing') return;
+        const targetId = current.peerId;
+        activeCalls.delete(userId);
+        if (callFor(targetId, callId)) activeCalls.delete(targetId);
+        callTimers.delete(callId);
+        io.to(roomFor(userId)).to(roomFor(targetId)).emit('call:ended', {callId, from:null, reason:'no-answer'});
+      }, 45000);
+      if (typeof timer.unref === 'function') timer.unref();
+      callTimers.set(callId, timer);
       io.to(roomFor(to)).emit('call:incoming', {callId, mode, caller});
       return reply({ok:true});
     } catch (error) {
@@ -344,7 +359,10 @@ io.on('connection',async socket=>{
     const reply = typeof ack === 'function' ? ack : () => {};
     const callId = payload && payload.callId;
     const own = callFor(userId, callId);
-    if (!own || own.status !== 'ringing') return reply({ok:false,error:'Cuộc gọi không còn khả dụng.'});
+    if (!own || own.status !== 'ringing' || own.isCaller) return reply({ok:false,error:'Chỉ người nhận mới có thể chấp nhận cuộc gọi.'});
+    const timer = callTimers.get(callId);
+    if (timer) clearTimeout(timer);
+    callTimers.delete(callId);
     own.status = 'connecting';
     const peer = callFor(own.peerId, callId);
     if (!peer) { closeCall(userId, callId, 'call:ended', {reason:'missing'}); return reply({ok:false,error:'Người gọi đã rời cuộc gọi.'}); }
@@ -358,7 +376,8 @@ io.on('connection',async socket=>{
     const to = payload && payload.to;
     const kind = payload && payload.kind;
     const own = callFor(userId, callId);
-    if (!own || own.peerId !== to || !callFor(to, callId)) return reply({ok:false,error:'Không tìm thấy cuộc gọi đang hoạt động.'});
+    const other = callFor(to, callId);
+    if (!own || own.peerId !== to || !other || own.status !== 'connecting' || other.status !== 'connecting') return reply({ok:false,error:'Không tìm thấy cuộc gọi đã được chấp nhận.'});
     if (kind === 'offer' || kind === 'answer') {
       const description = payload && payload.description;
       if (!description || !['offer','answer'].includes(description.type) || typeof description.sdp !== 'string' || description.sdp.length > 50000) {
