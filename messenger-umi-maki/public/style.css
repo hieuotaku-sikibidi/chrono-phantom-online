@@ -444,3 +444,14 @@ html[data-theme="dark"] .primary-btn { color:#fff; }
   .active-call-panel,.remote-video { min-height:280px; }
   .local-video { width:83px;height:112px;right:9px;bottom:9px; }
 }
+
+
+/* Keep the authentication screen consistent with the selected theme as well. */
+html[data-theme="dark"] .auth-screen { background:#191724; color:#eeeafa; }
+html[data-theme="dark"] .auth-side { background:linear-gradient(160deg,#211f2d 15%,#191724 100%); }
+html[data-theme="dark"] .auth-heading h2,html[data-theme="dark"] .auth-form label { color:#eeeafa; }
+html[data-theme="dark"] .auth-heading p,html[data-theme="dark"] .switch-line,html[data-theme="dark"] .privacy-note { color:#aaa3bd; }
+html[data-theme="dark"] .auth-form input { background:#2b283b;color:#eeeafa;border-color:#413b58; }
+html[data-theme="dark"] .auth-form input::placeholder { color:#9992ad; }
+html[data-theme="dark"] .auth-form input:focus { border-color:#9483f4;box-shadow:0 0 0 4px #aa9bff14; }
+html[data-theme="dark"] .mobile-brand.brand { color:#eeeafa; }
