@@ -113,6 +113,10 @@ async function main() {
     const callResults = await Promise.all([incomingCall, inviteAck]);
     assert.equal(callResults[0].callId, callId);
     assert.equal(callResults[0].mode, 'video');
+    const callerCannotAccept = await new Promise(resolve => {
+      socketA.emit('call:accept', { callId }, resolve);
+    });
+    assert.equal(callerCannotAccept.ok, false, 'only the recipient should accept an incoming call');
     const accepted = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Call accept signal timed out')), 8000);
       socketA.once('call:accepted', payload => { clearTimeout(timer); resolve(payload); });
