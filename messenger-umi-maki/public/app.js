@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const $ = selector => document.querySelector(selector);
-  const state = { token: localStorage.getItem('umi_token') || '', me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined };
+  const state = { me: null, socket: null, friends: [], incoming: [], outgoing: [], selected: null, messages: [], view: 'chats', query: '', searchResults: [], online: new Set(), pendingAvatar: undefined };
   let toastTimer = null, searchTimer = null;
 
   function esc(value) {
@@ -21,13 +21,12 @@
   }
   async function api(url, options = {}) {
     const headers = Object.assign({}, options.headers || {});
-    if (state.token) headers.Authorization = 'Bearer ' + state.token;
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-    const response = await fetch(url, Object.assign({}, options, { headers }));
+    const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, options, { headers }));
     let data = {};
     try { data = await response.json(); } catch {}
     if (!response.ok) {
-      if (response.status === 401 && state.token) signOut(false);
+      if (response.status === 401 && state.me) signOut(false);
       throw new Error(data.error || 'Đã có lỗi xảy ra. Hãy thử lại nhé.');
     }
     return data;
@@ -45,15 +44,15 @@
     setNote('#loginNote',''); setNote('#registerNote','');
   }
   function signOut(showLogin = true) {
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     if (state.socket) { state.socket.disconnect(); state.socket = null; }
-    state.token = ''; state.me = null; state.friends = []; state.incoming = []; state.outgoing = [];
+    state.me = null; state.friends = []; state.incoming = []; state.outgoing = [];
     state.selected = null; state.messages = []; state.online.clear();
-    localStorage.removeItem('umi_token');
     if (showLogin) toast('Bạn đã đăng xuất.');
     showAuth('login');
   }
-  async function startSession(token, user) {
-    state.token = token; state.me = user; localStorage.setItem('umi_token', token);
+  async function startSession(user) {
+    state.me = user;
     $('#authScreen').classList.add('hidden'); $('#appScreen').classList.remove('hidden');
     connectSocket();
     await refreshAll();
@@ -63,7 +62,7 @@
   function connectSocket() {
     if (state.socket) state.socket.disconnect();
     if (typeof window.io !== 'function') { toast('Không tải được kết nối thời gian thực. Hãy tải lại trang.', true); return; }
-    state.socket = window.io({ auth: { token: state.token }, reconnection: true });
+    state.socket = window.io({ withCredentials: true, reconnection: true });
     state.socket.on('connect_error', () => {});
     state.socket.on('presence:initial', ids => { state.online = new Set(ids || []); renderSidebar(); if (state.selected) renderChatHeader(); });
     state.socket.on('presence:update', data => {
@@ -71,7 +70,13 @@
       renderSidebar(); if (state.selected) renderChatHeader();
       if (state.view === 'friends') renderDirectory();
     });
-    state.socket.on('friends:refresh', async () => { await refreshAll(); });
+    state.socket.on('friends:refresh', async () => {
+      await refreshAll();
+      if (state.selected) {
+        const latest = state.friends.find(friend => friend.id === state.selected.id);
+        if (latest) { state.selected = { ...state.selected, ...latest }; renderChatHeader(); renderMessages(false); }
+      }
+    });
     state.socket.on('profile:refresh', data => {
       if (data && data.user && state.me && data.user.id === state.me.id) { state.me = data.user; renderMe(); }
     });
@@ -85,6 +90,10 @@
   }
   async function refreshFriends() {
     const data = await api('/api/friends'); state.friends = data.friends || [];
+    if (state.selected) {
+      const latest = state.friends.find(friend => friend.id === state.selected.id);
+      if (latest) state.selected = { ...state.selected, ...latest };
+    }
   }
   async function refreshRequests() {
     const data = await api('/api/friends/requests');
@@ -231,7 +240,10 @@
     } else {
       area.innerHTML = state.messages.map(message => {
         const mine = message.senderId === state.me.id;
-        return '<div class="message-row '+(mine?'mine':'theirs')+'"><div class="message-bubble">'+esc(message.text)+'</div><span class="message-time">'+formatTime(message.createdAt)+'</span></div>';
+        const sender = mine ? state.me : state.selected;
+        const senderAvatar = avatar(sender, 'message-avatar avatar');
+        const content = '<div class="message-content"><div class="message-bubble">'+esc(message.text)+'</div><span class="message-time">'+formatTime(message.createdAt)+'</span></div>';
+        return '<div class="message-row '+(mine?'mine':'theirs')+'">'+(mine ? content + senderAvatar : senderAvatar + content)+'</div>';
       }).join('');
     }
     if (scrollBottom) area.scrollTop = area.scrollHeight;
@@ -277,14 +289,14 @@
     event.preventDefault(); setNote('#loginNote','Đang đăng nhập…');
     try {
       const data=await api('/api/auth/login',{method:'POST',body:JSON.stringify({identifier:$('#loginIdentifier').value.trim(),password:$('#loginPassword').value})});
-      await startSession(data.token,data.user);
+      await startSession(data.user);
     } catch(error) { setNote('#loginNote',error.message); }
   });
   $('#registerForm').addEventListener('submit',async event=>{
     event.preventDefault(); setNote('#registerNote','Đang tạo tài khoản…');
     try {
       const data=await api('/api/auth/register',{method:'POST',body:JSON.stringify({displayName:$('#registerDisplay').value.trim(),username:$('#registerUsername').value.trim().toLowerCase(),password:$('#registerPassword').value})});
-      await startSession(data.token,data.user); toast('Chào mừng bạn đến với Umi and Maki! ID của bạn là '+data.user.publicId);
+      await startSession(data.user); toast('Chào mừng bạn đến với Umi and Maki! ID của bạn là '+data.user.publicId);
     } catch(error) { setNote('#registerNote',error.message); }
   });
   document.querySelectorAll('.nav-item').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.view)));
